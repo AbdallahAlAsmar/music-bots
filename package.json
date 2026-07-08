@@ -1,0 +1,66 @@
+{
+
+  "name": "bot-control",
+
+  "version": "1.0.0",
+
+  "private": true,
+
+  "type": "module",
+
+  "scripts": {
+
+    "build": "tsc -p tsconfig.json",
+
+    "check": "tsc -p tsconfig.json --noEmit",
+
+    "prestart": "npm install --omit=dev",
+
+    "start": "node dist/index.js",
+
+    "dev": "tsx src/index.ts"
+
+  },
+
+  "dependencies": {
+
+    "@discordjs/voice": "^0.19.2",
+
+    "@hono/node-server": "^2.0.6",
+
+    "@noble/ciphers": "^2.2.0",
+
+    "@snazzah/davey": "^0.1.12",
+
+    "@supabase/supabase-js": "^2.49.8",
+
+    "discord.js": "^14.26.2",
+
+    "dotenv": "^16.4.7",
+
+    "genius-lyrics-api": "^3.2.1",
+
+    "hono": "^4.12.27",
+
+    "jose": "^6.2.3",
+
+    "play-dl": "^1.9.7",
+
+    "shoukaku": "^4.3.0"
+
+  },
+
+  "devDependencies": {
+
+    "@types/node": "^22.14.1",
+
+    "ts-node": "^10.9.2",
+
+    "tsx": "^4.19.2",
+
+    "typescript": "^5.8.3"
+
+  }
+
+}
+

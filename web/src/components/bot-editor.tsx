@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   fetchAccess,
   fetchChannels,
@@ -249,18 +250,36 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
 
       {/* Alerts */}
       <div aria-live="polite">
-        {message ? (
-          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            <CheckCircleIcon className="h-4 w-4 shrink-0" />
-            {message}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            <AlertIcon className="h-4 w-4 shrink-0" />
-            {error}
-          </div>
-        ) : null}
+        <AnimatePresence>
+          {message ? (
+            <motion.div
+              key="message"
+              initial={{ opacity: 0, y: -8, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -8, height: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                {message}
+              </div>
+            </motion.div>
+          ) : null}
+          {error ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: -8, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -8, height: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <AlertIcon className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
         {bot.last_error ? (
           <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
             <AlertIcon className="h-4 w-4 shrink-0" />
@@ -280,9 +299,11 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
               </p>
             </div>
             <div className="h-2 w-40 overflow-hidden rounded-full bg-white/5">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                style={{ width: `${(setupDone / setupSteps.length) * 100}%` }}
+              <motion.div
+                className="h-full rounded-full bg-emerald-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${(setupDone / setupSteps.length) * 100}%` }}
+                transition={{ duration: 0.6, ease: [0.21, 0.47, 0.32, 0.98] }}
               />
             </div>
           </div>
@@ -318,18 +339,31 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`inline-flex shrink-0 cursor-pointer items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ${
-              tab === t.id
-                ? "border-emerald-400 text-emerald-300"
-                : "border-transparent text-slate-400 hover:text-white"
+            className={`relative inline-flex shrink-0 cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+              tab === t.id ? "text-emerald-300" : "text-slate-400 hover:text-white"
             }`}
           >
             <t.icon className="h-4 w-4" />
             {t.label}
+            {tab === t.id ? (
+              <motion.span
+                layoutId="editor-tab-underline"
+                className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-emerald-400"
+                transition={{ type: "spring", stiffness: 400, damping: 32 }}
+              />
+            ) : null}
           </button>
         ))}
       </div>
 
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+        >
       {/* Tab: Setup (server) */}
       {tab === "setup" ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -669,23 +703,33 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
           ) : null}
         </div>
       ) : null}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Sticky save bar */}
-      {dirty ? (
-        <div className="fixed inset-x-4 bottom-4 z-50">
-          <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/95 px-5 py-3.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
-            <p className="text-sm text-slate-300">You have unsaved changes</p>
-            <div className="flex shrink-0 gap-2">
-              <button type="button" className="btn-secondary px-4 py-2" onClick={handleDiscard} disabled={saving}>
-                Discard
-              </button>
-              <button type="button" className="btn-primary px-4 py-2" onClick={() => void handleSave()} disabled={saving}>
-                {saving ? "Saving..." : "Save changes"}
-              </button>
+      <AnimatePresence>
+        {dirty ? (
+          <motion.div
+            className="fixed inset-x-4 bottom-4 z-50"
+            initial={{ opacity: 0, y: 72 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 72 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          >
+            <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/95 px-5 py-3.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <p className="text-sm text-slate-300">You have unsaved changes</p>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" className="btn-secondary px-4 py-2" onClick={handleDiscard} disabled={saving}>
+                  Discard
+                </button>
+                <button type="button" className="btn-primary px-4 py-2" onClick={() => void handleSave()} disabled={saving}>
+                  {saving ? "Saving..." : "Save changes"}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

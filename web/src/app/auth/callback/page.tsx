@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "motion/react";
 import { exchangeDiscordCode } from "@/lib/api";
 import { storeSession } from "@/lib/auth";
 import { AlertIcon, MusicIcon } from "@/components/icons";
@@ -31,9 +32,13 @@ function AuthCallbackContent() {
 
   return (
     <div className="card w-full max-w-md px-8 py-10 text-center">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10">
+      <motion.span
+        className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10"
+        animate={error ? undefined : { scale: [1, 1.08, 1] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      >
         {error ? <AlertIcon className="h-6 w-6 text-rose-400" /> : <MusicIcon className="h-6 w-6 text-emerald-400" />}
-      </span>
+      </motion.span>
       {error ? (
         <>
           <h1 className="mt-5 text-xl font-bold text-white">Sign in failed</h1>
@@ -47,7 +52,11 @@ function AuthCallbackContent() {
           <h1 className="mt-5 text-xl font-bold text-white">Signing you in</h1>
           <p className="mt-2 text-sm text-slate-400">Completing Discord authentication...</p>
           <div className="mx-auto mt-6 h-1 w-32 overflow-hidden rounded-full bg-white/5">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500" />
+            <motion.div
+              className="h-full w-1/3 rounded-full bg-emerald-500"
+              animate={{ x: ["-100%", "300%"] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+            />
           </div>
         </>
       )}

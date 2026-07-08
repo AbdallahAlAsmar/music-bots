@@ -7,6 +7,7 @@ import { getStoredToken } from "@/lib/auth";
 import type { BotDto } from "@/lib/types";
 import { BotCard } from "@/components/bot-card";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion-primitives";
 import { ActivityIcon, AlertIcon, BotIcon, SearchIcon, ZapIcon } from "@/components/icons";
 
 type Filter = "all" | "active" | "needs-setup";
@@ -59,11 +60,17 @@ export default function DashboardPage() {
 
       {/* Stats */}
       {!loading && !error && bots.length > 0 ? (
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <StatCard icon={BotIcon} label="Total bots" value={stats.total} />
-          <StatCard icon={ZapIcon} label="Active now" value={stats.active} accent />
-          <StatCard icon={AlertIcon} label="Need setup" value={stats.needsSetup} warn={stats.needsSetup > 0} />
-        </div>
+        <Stagger inView={false} gap={0.1} className="mt-6 grid gap-4 sm:grid-cols-3">
+          <StaggerItem>
+            <StatCard icon={BotIcon} label="Total bots" value={stats.total} />
+          </StaggerItem>
+          <StaggerItem>
+            <StatCard icon={ZapIcon} label="Active now" value={stats.active} accent />
+          </StaggerItem>
+          <StaggerItem>
+            <StatCard icon={AlertIcon} label="Need setup" value={stats.needsSetup} warn={stats.needsSetup > 0} />
+          </StaggerItem>
+        </Stagger>
       ) : null}
 
       {/* Search + filters */}
@@ -171,11 +178,13 @@ export default function DashboardPage() {
 
       {/* Bot grid */}
       {!loading && visibleBots.length > 0 ? (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <Stagger inView={false} gap={0.07} delay={0.15} className="mt-6 grid gap-4 md:grid-cols-2">
           {visibleBots.map((bot) => (
-            <BotCard key={bot.id} bot={bot} />
+            <StaggerItem key={bot.id} className="h-full">
+              <BotCard bot={bot} />
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       ) : null}
     </DashboardShell>
   );
@@ -204,7 +213,9 @@ function StatCard({
         <Icon className="h-5 w-5" />
       </span>
       <div>
-        <p className="text-2xl font-bold text-white">{value}</p>
+        <p className="text-2xl font-bold text-white">
+          <AnimatedNumber value={value} />
+        </p>
         <p className="text-xs text-slate-500">{label}</p>
       </div>
     </div>

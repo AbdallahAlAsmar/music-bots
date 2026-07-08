@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getDiscordAuthUrl, getStoredToken } from "@/lib/auth";
 import {
   ActivityIcon,
+  AlertIcon,
   ArrowRightIcon,
   BotIcon,
   CheckCircleIcon,
@@ -69,6 +71,13 @@ const steps = [
 
 export default function HomePage() {
   const router = useRouter();
+  const [oauthError, setOauthError] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "oauth") {
+      setOauthError(true);
+    }
+  }, []);
 
   function handleLogin() {
     if (getStoredToken()) {
@@ -78,12 +87,46 @@ export default function HomePage() {
     try {
       window.location.href = getDiscordAuthUrl();
     } catch {
+      setOauthError(true);
       router.push("/?error=oauth");
     }
   }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {oauthError ? (
+        <div className="fixed inset-x-4 top-24 z-50">
+          <div
+            role="alert"
+            className="mx-auto flex max-w-2xl items-start gap-3 rounded-2xl border border-rose-500/30 bg-slate-950/95 px-5 py-4 shadow-2xl shadow-black/50 backdrop-blur-xl"
+          >
+            <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+            <div className="min-w-0">
+              <p className="font-semibold text-rose-300">Sign-in is not configured yet</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                Discord login is missing its configuration on this deployment. The site owner needs to set{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_DISCORD_CLIENT_ID</code> and{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_DISCORD_REDIRECT_URI</code>{" "}
+                in the hosting environment and redeploy.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              className="ml-auto shrink-0 cursor-pointer rounded-lg px-2 py-1 text-sm text-slate-500 transition-colors duration-200 hover:bg-white/5 hover:text-white"
+              onClick={() => {
+                setOauthError(false);
+                router.replace("/");
+              }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      ) : null}
       {/* Nav */}
       <header className="fixed inset-x-4 top-4 z-50">
         <nav className="mx-auto flex max-w-6xl items-center justify-between rounded-2xl border border-white/10 bg-slate-950/80 px-5 py-3 backdrop-blur-xl">

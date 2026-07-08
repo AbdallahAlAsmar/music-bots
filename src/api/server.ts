@@ -9,6 +9,7 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createBotRoutes } from "./routes/bots.js";
+import { createLicenseRoutes } from "./routes/licenses.js";
 
 export function createApiApp(
   manager: BotManager,
@@ -33,6 +34,10 @@ export function createApiApp(
     createBotRoutes({ manager, subRepo, accessRepo }).use("*", rateLimitMiddleware(120, 60_000))
   );
 
+  // PX License endpoints (/, /validate, /check, /health) share this port so
+  // the standalone PX-Licence Express server no longer needs to bind one.
+  app.route("/", createLicenseRoutes());
+
   app.onError((error, c) => {
     logger.error("API error", { error: error.message, path: c.req.path });
     return c.json({ error: "Internal server error" }, 500);
@@ -47,8 +52,9 @@ export function startApiServer(
   accessRepo: AccessRepository
 ): void {
   if (!env.apiEnabled) {
-    logger.info("Web API disabled (set DISCORD_CLIENT_ID and JWT_SECRET to enable)");
-    return;
+    // Still start the HTTP server: the PX License endpoints live on this
+    // port and must stay reachable even when the dashboard API is off.
+    logger.info("Web dashboard API disabled (set DISCORD_CLIENT_ID and JWT_SECRET to enable)");
   }
 
   const app = createApiApp(manager, subRepo, accessRepo);

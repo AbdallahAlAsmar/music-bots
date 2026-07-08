@@ -81,5 +81,9 @@ export const env = {
   discordRedirectUri: process.env.DISCORD_REDIRECT_URI ?? "",
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET ?? "",
+  // Optional: separate Supabase project holding the PX licenses table.
+  // Falls back to the main Supabase client when unset.
+  licenseSupabaseUrl: process.env.LICENSE_SUPABASE_URL ?? "",
+  licenseSupabaseKey: process.env.LICENSE_SUPABASE_KEY ?? "",
   apiEnabled: Boolean(process.env.DISCORD_CLIENT_ID && process.env.JWT_SECRET)
 };

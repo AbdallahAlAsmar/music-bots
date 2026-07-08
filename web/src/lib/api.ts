@@ -1,7 +1,10 @@
 import { clearSession, getStoredToken } from "./auth";
 import type { AccessDto, AuthUser, BotDto, ChannelDto, SubscriptionDto } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:21024";
+// Empty string = same-origin. Requests go to /api/* on this site and Next.js
+// rewrites proxy them to the bot host (see next.config.ts), avoiding both
+// CORS and the HTTPS-page-cannot-call-HTTP-API restriction.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getStoredToken();

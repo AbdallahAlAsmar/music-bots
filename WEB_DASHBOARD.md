@@ -55,8 +55,11 @@ The API starts automatically when **both** `DISCORD_CLIENT_ID` and `JWT_SECRET` 
 ### Smoke test (API)
 
 ```bash
-curl https://fi7.bot-hosting.net:21024/api/health
+curl http://fi7.bot-hosting.net:21024/api/health
 ```
+
+Note: the bot host serves plain HTTP (no SSL). That is fine — browsers never
+call it directly; Vercel proxies `/api/*` to it server-side (see below).
 
 Expected:
 
@@ -71,10 +74,16 @@ Deploy the `web/` directory as a separate project.
 Environment variables:
 
 ```env
-NEXT_PUBLIC_API_URL=https://fi7.bot-hosting.net:21024
+API_PROXY_TARGET=http://fi7.bot-hosting.net:21024
 NEXT_PUBLIC_DISCORD_CLIENT_ID=your_client_id
 NEXT_PUBLIC_DISCORD_REDIRECT_URI=https://your-dashboard.vercel.app/auth/callback
 ```
+
+Leave `NEXT_PUBLIC_API_URL` unset. The browser calls `/api/*` on the Vercel
+domain itself, and `next.config.ts` rewrites proxy those requests to
+`API_PROXY_TARGET` server-side. This avoids CORS entirely and works even
+though the bot host has no HTTPS certificate. `NEXT_PUBLIC_*` values are
+inlined at build time, so redeploy without build cache after changing them.
 
 Local development:
 

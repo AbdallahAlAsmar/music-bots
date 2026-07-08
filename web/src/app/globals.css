@@ -1,31 +1,83 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0d12;
-  --foreground: #f4f4f5;
+  --background: #020617;
+  --surface: #0f172a;
+  --surface-2: #1e293b;
+  --foreground: #f8fafc;
+  --muted: #94a3b8;
+  --accent: #22c55e;
+  --accent-hover: #4ade80;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --font-sans: var(--font-jakarta);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
 }
 
+::selection {
+  background: rgba(34, 197, 94, 0.3);
+}
+
+/* Form controls */
 .field {
-  @apply w-full rounded-xl border border-white/10 bg-[#0f131b] px-3 py-2 text-sm text-white outline-none transition focus:border-indigo-400/50;
+  @apply w-full rounded-xl border border-white/10 bg-slate-950/60 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors duration-200 placeholder:text-slate-500 hover:border-white/20 focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/20;
+}
+
+select.field {
+  @apply cursor-pointer appearance-none bg-no-repeat pr-10;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.75rem center;
 }
 
 .btn-primary {
-  @apply rounded-xl bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors duration-200 hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .btn-secondary {
-  @apply rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10;
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors duration-200 hover:border-white/20 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400;
+}
+
+.btn-danger {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-300 transition-colors duration-200 hover:border-rose-500/50 hover:bg-rose-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400;
+}
+
+.card {
+  @apply rounded-2xl border border-white/10 bg-slate-900/60;
+}
+
+/* Subtle glow for hero headline */
+.glow-text {
+  text-shadow: 0 0 24px rgba(34, 197, 94, 0.25);
+}
+
+/* Grid backdrop for hero */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

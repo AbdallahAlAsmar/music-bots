@@ -3,41 +3,58 @@
 import Link from "next/link";
 import type { BotDto } from "@/lib/types";
 import { botStatusTone, StatusBadge } from "@/components/status-badge";
+import { AlertIcon, ArrowRightIcon, BotIcon, MicIcon } from "@/components/icons";
 
 type BotCardProps = {
   bot: BotDto;
 };
 
 export function BotCard({ bot }: BotCardProps) {
+  const needsSetup = !bot.voice_channel_id;
+
   return (
     <Link
       href={`/dashboard/bots/${bot.id}`}
-      className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-indigo-400/40 hover:bg-white/[0.05]"
+      className="card group block cursor-pointer p-5 transition-colors duration-200 hover:border-emerald-500/40"
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-indigo-500/20 ring-1 ring-indigo-400/20">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-500/10 ring-1 ring-white/10">
             {bot.avatar ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={bot.avatar} alt="" className="h-full w-full object-cover" />
+              <img src={bot.avatar} alt={`${bot.display_name} avatar`} className="h-full w-full object-cover" />
             ) : (
-              <span className="text-lg font-semibold text-indigo-200">{bot.display_name.slice(0, 1)}</span>
+              <BotIcon className="h-6 w-6 text-emerald-400" />
             )}
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-white group-hover:text-indigo-200">{bot.display_name}</h3>
-            <p className="text-sm text-zinc-400">Guild {bot.guild_id}</p>
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-semibold text-white transition-colors duration-200 group-hover:text-emerald-300">
+              {bot.display_name}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Runtime: {bot.runtime_state ?? "unknown"}
+            </p>
           </div>
         </div>
-        <StatusBadge label={bot.status} tone={botStatusTone(bot.status)} />
+        <StatusBadge label={bot.status} tone={botStatusTone(bot.status)} pulse={bot.status === "active"} />
       </div>
-      <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-400">
-        <span className="rounded-md bg-white/5 px-2 py-1">Runtime: {bot.runtime_state ?? "unknown"}</span>
-        {bot.voice_channel_id ? (
-          <span className="rounded-md bg-white/5 px-2 py-1">Voice: {bot.voice_channel_id}</span>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        {needsSetup ? (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300">
+            <AlertIcon className="h-3.5 w-3.5" />
+            Finish setup
+          </span>
         ) : (
-          <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-200">No voice channel</span>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs text-slate-400">
+            <MicIcon className="h-3.5 w-3.5" />
+            Voice assigned
+          </span>
         )}
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors duration-200 group-hover:text-emerald-300">
+          Manage
+          <ArrowRightIcon className="h-3.5 w-3.5" />
+        </span>
       </div>
     </Link>
   );

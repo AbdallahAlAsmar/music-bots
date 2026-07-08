@@ -220,7 +220,9 @@ export default function HomePage() {
       </motion.header>
 
       {/* Hero */}
-      <section className="hero-grid relative overflow-hidden px-6 pb-24 pt-40">
+      <section className="relative overflow-hidden px-6 pb-24 pt-40">
+        {/* Background layers only — masking must never apply to the content */}
+        <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
         <motion.div
           className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(ellipse 60% 45% at 50% 0%, rgba(34,197,94,0.12), transparent 70%)" }}

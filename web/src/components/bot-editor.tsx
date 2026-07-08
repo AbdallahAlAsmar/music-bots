@@ -58,6 +58,7 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const [channels, setChannels] = useState<ChannelDto[]>([]);
   const [channelsError, setChannelsError] = useState<string | null>(null);
   const [guilds, setGuilds] = useState<GuildDto[]>([]);
+  const [guildsError, setGuildsError] = useState<string | null>(null);
   const [pendingGuildId, setPendingGuildId] = useState<string | null>(null);
   const [movingGuild, setMovingGuild] = useState(false);
   const [access, setAccess] = useState<AccessDto[]>([]);
@@ -106,8 +107,14 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
       .then((res) => setInvite(res.invite))
       .catch(() => setInvite(null));
     void fetchGuilds(bot.id)
-      .then((res) => setGuilds(res.guilds))
-      .catch(() => setGuilds([]));
+      .then((res) => {
+        setGuilds(res.guilds);
+        setGuildsError(null);
+      })
+      .catch((err: Error) => {
+        setGuilds([]);
+        setGuildsError(err.message);
+      });
   }, [bot.id]);
 
   useEffect(() => {
@@ -409,12 +416,28 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
             title="Discord server"
             description="The server this bot operates in. Moving it resets channel assignments."
           >
+            {guildsError ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                <p className="flex items-center gap-2 font-medium">
+                  <AlertIcon className="h-4 w-4" />
+                  Could not load servers
+                </p>
+                <p className="mt-1 text-amber-100/80">
+                  {guildsError.includes("404") ||
+                  guildsError.toLowerCase().includes("not found") ||
+                  guildsError === "Request failed"
+                    ? "The bot runtime on the host is running an older version — update and restart it to enable server switching."
+                    : guildsError}
+                </p>
+              </div>
+            ) : null}
             <Field label="Server">
               <Select
                 ariaLabel="Discord server"
                 value={selectedGuildId}
                 onChange={(guildId) => setPendingGuildId(guildId === bot.guild_id ? null : guildId)}
-                placeholder={guilds.length ? "Select a server" : "Loading servers..."}
+                placeholder={guildsError ? "Unavailable" : guilds.length ? "Select a server" : "Loading servers..."}
+                disabled={Boolean(guildsError) || guilds.length === 0}
                 options={guilds.map((guild) => ({
                   value: guild.id,
                   label: guild.name,

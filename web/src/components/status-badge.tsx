@@ -50,6 +50,48 @@ export function botStatusTone(status: string): NonNullable<StatusBadgeProps["ton
   }
 }
 
+type EffectiveStatus = {
+  label: string;
+  tone: NonNullable<StatusBadgeProps["tone"]>;
+  pulse: boolean;
+  /** True only when the bot is genuinely up and healthy */
+  healthy: boolean;
+};
+
+/**
+ * The honest at-a-glance state of a bot. A bot marked "active" in the
+ * database can still be broken (runtime error) or unusable (setup not
+ * finished) — those must never show green.
+ */
+export function effectiveBotStatus(bot: {
+  status: string;
+  runtime_state: string | null;
+  voice_channel_id: string | null;
+}): EffectiveStatus {
+  if (bot.runtime_state === "error") {
+    return { label: "error", tone: "red", pulse: false, healthy: false };
+  }
+  if (bot.status === "expired" || bot.status === "suspended") {
+    return { label: bot.status, tone: "red", pulse: false, healthy: false };
+  }
+  if (bot.status === "paused") {
+    return { label: "paused", tone: "yellow", pulse: false, healthy: false };
+  }
+  if (!bot.voice_channel_id) {
+    return { label: "needs setup", tone: "yellow", pulse: false, healthy: false };
+  }
+  if (bot.status === "active") {
+    if (bot.runtime_state === "starting") {
+      return { label: "starting", tone: "blue", pulse: true, healthy: false };
+    }
+    if (bot.runtime_state === "degraded") {
+      return { label: "degraded", tone: "yellow", pulse: false, healthy: false };
+    }
+    return { label: "active", tone: "green", pulse: true, healthy: true };
+  }
+  return { label: bot.status, tone: "gray", pulse: false, healthy: false };
+}
+
 export function runtimeTone(runtimeState: string | null): NonNullable<StatusBadgeProps["tone"]> {
   switch (runtimeState) {
     case "ready":

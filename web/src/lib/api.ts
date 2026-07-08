@@ -1,5 +1,5 @@
 import { clearSession, getStoredToken } from "./auth";
-import type { AccessDto, AuthUser, BotDto, ChannelDto, SubscriptionDto } from "./types";
+import type { AccessDto, AuthUser, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "./types";
 
 // Empty string = same-origin. Requests go to /api/* on this site and Next.js
 // rewrites proxy them to the bot host (see next.config.ts), avoiding both
@@ -92,6 +92,17 @@ export async function stopBot(id: string): Promise<{ bot: BotDto }> {
 
 export async function fetchChannels(id: string): Promise<{ channels: ChannelDto[] }> {
   return apiFetch(`/api/bots/${id}/channels`);
+}
+
+export async function fetchGuilds(id: string): Promise<{ guilds: GuildDto[] }> {
+  return apiFetch(`/api/bots/${id}/guilds`);
+}
+
+export async function updateGuild(id: string, guildId: string): Promise<{ bot: BotDto }> {
+  return apiFetch(`/api/bots/${id}/guild`, {
+    method: "POST",
+    body: JSON.stringify({ guild_id: guildId })
+  });
 }
 
 export async function fetchInvite(id: string): Promise<{ invite: string }> {

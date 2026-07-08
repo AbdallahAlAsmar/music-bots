@@ -7,6 +7,7 @@ import { getStoredToken } from "@/lib/auth";
 import type { BotDto } from "@/lib/types";
 import { BotCard } from "@/components/bot-card";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { effectiveBotStatus } from "@/components/status-badge";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion-primitives";
 import { ActivityIcon, AlertIcon, BotIcon, SearchIcon, ZapIcon } from "@/components/icons";
 
@@ -33,7 +34,7 @@ export default function DashboardPage() {
   }, [router]);
 
   const stats = useMemo(() => {
-    const active = bots.filter((bot) => bot.status === "active").length;
+    const active = bots.filter((bot) => effectiveBotStatus(bot).healthy).length;
     const needsSetup = bots.filter((bot) => !bot.voice_channel_id).length;
     return { total: bots.length, active, needsSetup };
   }, [bots]);
@@ -41,7 +42,7 @@ export default function DashboardPage() {
   const visibleBots = useMemo(() => {
     const q = query.trim().toLowerCase();
     return bots.filter((bot) => {
-      if (filter === "active" && bot.status !== "active") return false;
+      if (filter === "active" && !effectiveBotStatus(bot).healthy) return false;
       if (filter === "needs-setup" && bot.voice_channel_id) return false;
       if (q && !bot.display_name.toLowerCase().includes(q)) return false;
       return true;

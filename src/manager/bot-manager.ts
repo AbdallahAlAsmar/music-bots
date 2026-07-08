@@ -256,6 +256,61 @@ export class BotManager {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  async getBotGuilds(
+    botId: string,
+    requesterId: string
+  ): Promise<Array<{ id: string; name: string; icon: string | null }>> {
+    await this.permissionService.assertRole(botId, requesterId, "viewer");
+    const bot = await this.botRepo.findById(botId);
+    if (!bot) {
+      throw new Error("Bot not found");
+    }
+
+    const token = decrypt(bot.token, env.encryptionKey);
+    const response = await fetch("https://discord.com/api/v10/users/@me/guilds", {
+      headers: { Authorization: `Bot ${token}` }
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Failed to fetch bot guilds (${response.status}): ${detail.slice(0, 200)}`);
+    }
+
+    const guilds = (await response.json()) as Array<{ id: string; name: string; icon: string | null }>;
+    return guilds
+      .map((guild) => ({
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : null
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async updateBotGuildForUser(requesterId: string, botId: string, guildId: string): Promise<void> {
+    await this.permissionService.assertRole(botId, requesterId, "admin");
+    const bot = await this.botRepo.findById(botId);
+    if (!bot) {
+      throw new Error("Bot not found");
+    }
+    if (bot.guild_id === guildId) {
+      return;
+    }
+    // Moving servers invalidates channel assignments from the old guild.
+    await this.botRepo.update(botId, {
+      guild_id: guildId,
+      voice_channel_id: null,
+      log_channel_id: null
+    });
+
+    // A running bot must reconnect to operate in the new guild.
+    if (bot.status === "active") {
+      await this.stop(botId);
+      await this.start(botId);
+    } else {
+      await this.refreshRuntime(botId);
+    }
+  }
+
   async pauseBotForUser(requesterId: string, botId: string): Promise<void> {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     await this.pauseBot(botId);

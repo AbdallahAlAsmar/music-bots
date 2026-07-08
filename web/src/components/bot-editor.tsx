@@ -5,15 +5,18 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   fetchAccess,
   fetchChannels,
+  fetchGuilds,
   fetchInvite,
   grantAccess,
   revokeAccess,
   startBot,
   stopBot,
-  updateBot
+  updateBot,
+  updateGuild
 } from "@/lib/api";
-import type { AccessDto, BotDto, ChannelDto, SubscriptionDto } from "@/lib/types";
-import { botStatusTone, runtimeTone, StatusBadge } from "@/components/status-badge";
+import type { AccessDto, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "@/lib/types";
+import { effectiveBotStatus, runtimeTone, StatusBadge } from "@/components/status-badge";
+import { Select } from "@/components/select";
 import {
   AlertIcon,
   BotIcon,
@@ -54,6 +57,9 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const [subscription] = useState(initialSubscription);
   const [channels, setChannels] = useState<ChannelDto[]>([]);
   const [channelsError, setChannelsError] = useState<string | null>(null);
+  const [guilds, setGuilds] = useState<GuildDto[]>([]);
+  const [pendingGuildId, setPendingGuildId] = useState<string | null>(null);
+  const [movingGuild, setMovingGuild] = useState(false);
   const [access, setAccess] = useState<AccessDto[]>([]);
   const [invite, setInvite] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -90,12 +96,18 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
         setChannelsError(null);
       })
       .catch((err: Error) => setChannelsError(err.message));
+  }, [bot.id, bot.guild_id]);
+
+  useEffect(() => {
     void fetchAccess(bot.id)
       .then((res) => setAccess(res.access))
       .catch(() => undefined);
     void fetchInvite(bot.id)
       .then((res) => setInvite(res.invite))
       .catch(() => setInvite(null));
+    void fetchGuilds(bot.id)
+      .then((res) => setGuilds(res.guilds))
+      .catch(() => setGuilds([]));
   }, [bot.id]);
 
   useEffect(() => {
@@ -179,6 +191,27 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function handleMoveGuild() {
+    if (!pendingGuildId || pendingGuildId === bot.guild_id) return;
+    setMovingGuild(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await updateGuild(bot.id, pendingGuildId);
+      setBot(result.bot);
+      // Channels from the old server no longer apply
+      setChannels([]);
+      setForm((prev) => ({ ...prev, voice_channel_id: "", log_channel_id: "" }));
+      setPendingGuildId(null);
+      const guildName = guilds.find((guild) => guild.id === result.bot.guild_id)?.name;
+      setMessage(guildName ? `Bot moved to ${guildName}. Pick a new voice channel.` : "Server changed. Pick a new voice channel.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to change server");
+    } finally {
+      setMovingGuild(false);
+    }
+  }
+
   const voiceChannels = channels.filter((channel) => channel.type === "voice");
   const textChannels = channels.filter((channel) => channel.type === "text");
 
@@ -191,6 +224,11 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const setupComplete = setupDone === setupSteps.length;
 
   const isRunning = bot.status === "active";
+  const status = effectiveBotStatus(bot);
+
+  const currentGuild = guilds.find((guild) => guild.id === bot.guild_id);
+  const selectedGuildId = pendingGuildId ?? bot.guild_id;
+  const guildChanged = selectedGuildId !== bot.guild_id;
 
   return (
     <div className="pb-28">
@@ -215,9 +253,9 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
             <div className="pb-1">
               <h2 className="text-2xl font-bold tracking-tight text-white">{bot.display_name}</h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <StatusBadge label={bot.status} tone={botStatusTone(bot.status)} pulse={isRunning} />
+                <StatusBadge label={status.label} tone={status.tone} pulse={status.pulse} />
                 {bot.runtime_state ? (
-                  <StatusBadge label={bot.runtime_state} tone={runtimeTone(bot.runtime_state)} />
+                  <StatusBadge label={`runtime: ${bot.runtime_state}`} tone={runtimeTone(bot.runtime_state)} />
                 ) : null}
               </div>
             </div>
@@ -367,6 +405,73 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
       {/* Tab: Setup (server) */}
       {tab === "setup" ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <Panel
+            title="Discord server"
+            description="The server this bot operates in. Moving it resets channel assignments."
+          >
+            <Field label="Server">
+              <Select
+                ariaLabel="Discord server"
+                value={selectedGuildId}
+                onChange={(guildId) => setPendingGuildId(guildId === bot.guild_id ? null : guildId)}
+                placeholder={guilds.length ? "Select a server" : "Loading servers..."}
+                options={guilds.map((guild) => ({
+                  value: guild.id,
+                  label: guild.name,
+                  icon: guild.icon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={guild.icon} alt="" className="h-5 w-5 rounded-md" />
+                  ) : (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-white/10 text-[10px] font-bold text-slate-300">
+                      {guild.name.charAt(0).toUpperCase()}
+                    </span>
+                  )
+                }))}
+              />
+            </Field>
+            <AnimatePresence>
+              {guildChanged ? (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="overflow-hidden"
+                >
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                    <p className="text-sm text-amber-100">
+                      Moving the bot restarts it, and its voice and log channels will need to be picked again in the
+                      new server.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary px-4 py-2"
+                        disabled={movingGuild}
+                        onClick={() => void handleMoveGuild()}
+                      >
+                        {movingGuild ? "Moving..." : "Move bot to this server"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary px-4 py-2"
+                        disabled={movingGuild}
+                        onClick={() => setPendingGuildId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+            {!guildChanged && currentGuild ? (
+              <p className="text-xs text-slate-500">
+                Channels below are loaded from <span className="text-slate-300">{currentGuild.name}</span>.
+              </p>
+            ) : null}
+          </Panel>
+
           <Panel title="Voice & channels" description="Where your bot lives and logs.">
             {channelsError ? (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
@@ -380,45 +485,40 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
               </div>
             ) : null}
             <Field label="Voice channel" hint="Members must join this channel to use music commands.">
-              <div className="relative">
-                <MicIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                <select
-                  className="field pl-10"
-                  value={form.voice_channel_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, voice_channel_id: e.target.value }))}
-                >
-                  <option value="">Not set</option>
-                  {voiceChannels.map((channel) => (
-                    <option key={channel.id} value={channel.id}>
-                      {channel.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                ariaLabel="Voice channel"
+                value={form.voice_channel_id}
+                onChange={(value) => setForm((prev) => ({ ...prev, voice_channel_id: value }))}
+                leadingIcon={<MicIcon className="h-4 w-4" />}
+                placeholder="Not set"
+                options={[
+                  { value: "", label: "Not set" },
+                  ...voiceChannels.map((channel) => ({ value: channel.id, label: channel.name }))
+                ]}
+              />
             </Field>
             <Field label="Log channel" hint="Optional. Bot activity logs are posted here.">
-              <select
-                className="field"
+              <Select
+                ariaLabel="Log channel"
                 value={form.log_channel_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, log_channel_id: e.target.value }))}
-              >
-                <option value="">Disabled</option>
-                {textChannels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    #{channel.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm((prev) => ({ ...prev, log_channel_id: value }))}
+                placeholder="Disabled"
+                options={[
+                  { value: "", label: "Disabled" },
+                  ...textChannels.map((channel) => ({ value: channel.id, label: `#${channel.name}` }))
+                ]}
+              />
             </Field>
             <Field label="Bot language">
-              <select
-                className="field"
+              <Select
+                ariaLabel="Bot language"
                 value={form.language}
-                onChange={(e) => setForm((prev) => ({ ...prev, language: e.target.value as "ar" | "en" }))}
-              >
-                <option value="ar">العربية (Arabic)</option>
-                <option value="en">English</option>
-              </select>
+                onChange={(value) => setForm((prev) => ({ ...prev, language: value as "ar" | "en" }))}
+                options={[
+                  { value: "ar", label: "العربية (Arabic)" },
+                  { value: "en", label: "English" }
+                ]}
+              />
             </Field>
           </Panel>
 
@@ -514,21 +614,22 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <Panel title="Activity status" description="What the bot shows under its name in the member list.">
             <Field label="Activity type">
-              <select
-                className="field"
+              <Select
+                ariaLabel="Activity type"
                 value={form.status_type}
-                onChange={(e) =>
+                onChange={(value) =>
                   setForm((prev) => ({
                     ...prev,
-                    status_type: e.target.value as NonNullable<BotDto["status_type"]>
+                    status_type: value as NonNullable<BotDto["status_type"]>
                   }))
                 }
-              >
-                <option value="PLAYING">Playing</option>
-                <option value="LISTENING">Listening to</option>
-                <option value="WATCHING">Watching</option>
-                <option value="COMPETING">Competing in</option>
-              </select>
+                options={[
+                  { value: "PLAYING", label: "Playing" },
+                  { value: "LISTENING", label: "Listening to" },
+                  { value: "WATCHING", label: "Watching" },
+                  { value: "COMPETING", label: "Competing in" }
+                ]}
+              />
             </Field>
             <Field label="Status text">
               <input
@@ -540,21 +641,22 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
               />
             </Field>
             <Field label="Online status">
-              <select
-                className="field"
+              <Select
+                ariaLabel="Online status"
                 value={form.online_status}
-                onChange={(e) =>
+                onChange={(value) =>
                   setForm((prev) => ({
                     ...prev,
-                    online_status: e.target.value as NonNullable<BotDto["online_status"]>
+                    online_status: value as NonNullable<BotDto["online_status"]>
                   }))
                 }
-              >
-                <option value="online">Online</option>
-                <option value="idle">Idle</option>
-                <option value="dnd">Do Not Disturb</option>
-                <option value="invisible">Invisible</option>
-              </select>
+                options={[
+                  { value: "online", label: "Online", icon: <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> },
+                  { value: "idle", label: "Idle", icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> },
+                  { value: "dnd", label: "Do Not Disturb", icon: <span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> },
+                  { value: "invisible", label: "Invisible", icon: <span className="h-2.5 w-2.5 rounded-full bg-slate-600" /> }
+                ]}
+              />
             </Field>
           </Panel>
 
@@ -653,14 +755,15 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
               />
             </Field>
             <Field label="Role">
-              <select
-                className="field"
+              <Select
+                ariaLabel="Role"
                 value={accessRole}
-                onChange={(e) => setAccessRole(e.target.value as "admin" | "viewer")}
-              >
-                <option value="admin">Admin — can edit and control the bot</option>
-                <option value="viewer">Viewer — read-only access</option>
-              </select>
+                onChange={(value) => setAccessRole(value as "admin" | "viewer")}
+                options={[
+                  { value: "admin", label: "Admin — can edit and control the bot" },
+                  { value: "viewer", label: "Viewer — read-only access" }
+                ]}
+              />
             </Field>
             <button
               type="button"

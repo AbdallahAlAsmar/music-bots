@@ -125,6 +125,38 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     }
   });
 
+  app.get("/:id/guilds", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+
+    try {
+      const guilds = await manager.getBotGuilds(botId, user.id);
+      return c.json({ guilds });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/guild", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ guild_id?: string }>();
+
+    if (!body.guild_id?.trim()) {
+      return c.json({ error: "guild_id is required" }, 400);
+    }
+
+    try {
+      await manager.updateBotGuildForUser(user.id, botId, body.guild_id.trim());
+      const { bot } = await manager.botInfo(botId);
+      return c.json({ bot: toBotDto(bot) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
   app.get("/:id/invite", async (c) => {
     const user = c.get("user");
     const botId = c.req.param("id");

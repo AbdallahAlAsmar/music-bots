@@ -16,7 +16,7 @@ web/.next/
 web/out/
 web/build/
 *.tsbuildinfo
-
+PX-Licence/
 # Logs
 logs/
 *.log

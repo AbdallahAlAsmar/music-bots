@@ -37,6 +37,12 @@ export type ChannelDto = {
   type: "voice" | "text";
 };
 
+export type GuildDto = {
+  id: string;
+  name: string;
+  icon: string | null;
+};
+
 export type AccessDto = {
   user_id: string;
   role: "owner" | "admin" | "viewer";

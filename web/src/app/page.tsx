@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, useSpring } from "motion/react";
 import { getDiscordAuthUrl, getStoredToken } from "@/lib/auth";
 import { Equalizer, FadeUp, Stagger, StaggerItem } from "@/components/motion-primitives";
 import {
@@ -88,6 +88,26 @@ const missingOauthVars = [
 export default function HomePage() {
   const router = useRouter();
   const [oauthError, setOauthError] = useState(false);
+  const reducedMotion = useReducedMotion();
+
+  // Gentle 3D tilt on the hero preview, following the pointer
+  const previewRef = useRef<HTMLDivElement>(null);
+  const tiltX = useSpring(0, { stiffness: 140, damping: 18 });
+  const tiltY = useSpring(0, { stiffness: 140, damping: 18 });
+
+  function handlePreviewMove(event: React.PointerEvent) {
+    if (reducedMotion || !previewRef.current) return;
+    const rect = previewRef.current.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / rect.width - 0.5;
+    const py = (event.clientY - rect.top) / rect.height - 0.5;
+    tiltY.set(px * 7);
+    tiltX.set(-py * 7);
+  }
+
+  function handlePreviewLeave() {
+    tiltX.set(0);
+    tiltY.set(0);
+  }
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("error") === "oauth") {
@@ -222,7 +242,7 @@ export default function HomePage() {
               <h1 className="glow-text mx-auto max-w-4xl text-5xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl">
                 Your music bots,
                 <br />
-                <span className="text-emerald-400">finally easy to manage.</span>
+                <span className="gradient-text">finally easy to manage.</span>
               </h1>
             </StaggerItem>
             <StaggerItem>
@@ -254,6 +274,16 @@ export default function HomePage() {
                 </motion.a>
               </div>
             </StaggerItem>
+            <StaggerItem>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
+                {["2-minute setup", "Nothing to install", "Runs 24/7"].map((chip) => (
+                  <span key={chip} className="inline-flex items-center gap-1.5">
+                    <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-400/70" />
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </StaggerItem>
           </Stagger>
 
           {/* Dashboard preview mock */}
@@ -262,44 +292,76 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 48, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+            style={{ perspective: 1200 }}
           >
             <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+              ref={previewRef}
+              onPointerMove={handlePreviewMove}
+              onPointerLeave={handlePreviewLeave}
+              style={{ rotateX: tiltX, rotateY: tiltY }}
             >
-              <div className="card overflow-hidden text-left shadow-2xl shadow-emerald-500/5">
-                <div className="flex items-center gap-2 border-b border-white/10 bg-slate-950/60 px-5 py-3.5">
-                  <span className="h-3 w-3 rounded-full bg-rose-500/70" />
-                  <span className="h-3 w-3 rounded-full bg-amber-500/70" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-500/70" />
-                  <span className="ml-3 text-xs text-slate-500">pxvault.app/dashboard</span>
-                </div>
-                <Stagger className="grid gap-4 p-6 sm:grid-cols-2" gap={0.1} delay={0.9} inView={false}>
-                  {mockBots.map((mock) => (
-                    <StaggerItem key={mock.name}>
-                      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                            <BotIcon className="h-5 w-5" />
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-white">{mock.name}</p>
-                            <p className="text-xs text-slate-500">{mock.state}</p>
+              <motion.div
+                animate={{ y: [0, -8, 0] }}
+                transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div className="card overflow-hidden text-left shadow-2xl shadow-emerald-500/5">
+                  <div className="flex items-center gap-2 border-b border-white/10 bg-slate-950/60 px-5 py-3.5">
+                    <span className="h-3 w-3 rounded-full bg-rose-500/70" />
+                    <span className="h-3 w-3 rounded-full bg-amber-500/70" />
+                    <span className="h-3 w-3 rounded-full bg-emerald-500/70" />
+                    <span className="ml-3 text-xs text-slate-500">pxvault.app/dashboard</span>
+                  </div>
+                  <Stagger className="grid gap-4 p-6 pb-4 sm:grid-cols-2" gap={0.1} delay={0.9} inView={false}>
+                    {mockBots.map((mock) => (
+                      <StaggerItem key={mock.name}>
+                        <div className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                              <BotIcon className="h-5 w-5" />
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">{mock.name}</p>
+                              <p className="text-xs text-slate-500">{mock.state}</p>
+                            </div>
                           </div>
+                          {mock.playing ? (
+                            <Equalizer className="h-4" />
+                          ) : (
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full ${mock.online ? "bg-emerald-400" : "bg-slate-600"}`}
+                              aria-label={mock.online ? "Online" : "Offline"}
+                            />
+                          )}
                         </div>
-                        {mock.playing ? (
-                          <Equalizer className="h-4" />
-                        ) : (
-                          <span
-                            className={`h-2.5 w-2.5 rounded-full ${mock.online ? "bg-emerald-400" : "bg-slate-600"}`}
-                            aria-label={mock.online ? "Online" : "Offline"}
-                          />
-                        )}
+                      </StaggerItem>
+                    ))}
+                  </Stagger>
+                  {/* Now playing bar */}
+                  <motion.div
+                    className="mx-6 mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.5, duration: 0.5 }}
+                  >
+                    <Equalizer className="h-5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="truncate text-sm font-medium text-white">The Neighbourhood — Afraid</p>
+                        <p className="shrink-0 text-xs text-slate-500">PXVault 1</p>
                       </div>
-                    </StaggerItem>
-                  ))}
-                </Stagger>
-              </div>
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10">
+                        <motion.div
+                          className="h-full rounded-full bg-emerald-400"
+                          animate={reducedMotion ? { width: "45%" } : { width: ["8%", "92%"] }}
+                          transition={
+                            reducedMotion ? undefined : { duration: 24, repeat: Infinity, ease: "linear" }
+                          }
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
             </motion.div>
           </motion.div>
         </div>
@@ -309,7 +371,10 @@ export default function HomePage() {
       <section id="features" className="scroll-mt-24 px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <FadeUp inView className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything your bots need</h2>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-300">
+              Features
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Everything your bots need</h2>
             <p className="mt-4 text-lg text-slate-400">
               Every tool from the Discord control panel, redesigned for the web.
             </p>
@@ -338,7 +403,10 @@ export default function HomePage() {
       <section id="how-it-works" className="scroll-mt-24 border-t border-white/5 bg-slate-950/40 px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <FadeUp inView className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Set up in three steps</h2>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-300">
+              How it works
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Set up in three steps</h2>
             <p className="mt-4 text-lg text-slate-400">From sign-in to music playing in under two minutes.</p>
           </FadeUp>
           <Stagger className="mt-14 grid gap-5 md:grid-cols-3" gap={0.15}>
@@ -377,19 +445,29 @@ export default function HomePage() {
 
       {/* Final CTA */}
       <section className="px-6 py-24">
-        <FadeUp inView className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Ready to take control?</h2>
-          <p className="mt-4 text-lg text-slate-400">Sign in and see your bots in seconds. Nothing to install.</p>
-          <motion.button
-            type="button"
-            onClick={handleLogin}
-            className="btn-primary mt-8 px-8 py-4 text-base"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <DiscordIcon className="h-5 w-5" />
-            Continue with Discord
-          </motion.button>
+        <FadeUp inView className="mx-auto max-w-3xl">
+          <div className="card relative overflow-hidden border-emerald-500/20 px-8 py-14 text-center">
+            <motion.div
+              className="pointer-events-none absolute inset-0"
+              style={{ background: "radial-gradient(ellipse 70% 90% at 50% 110%, rgba(34,197,94,0.16), transparent 70%)" }}
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <div className="relative">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Ready to take control?</h2>
+              <p className="mt-4 text-lg text-slate-400">Sign in and see your bots in seconds. Nothing to install.</p>
+              <motion.button
+                type="button"
+                onClick={handleLogin}
+                className="btn-primary mt-8 px-8 py-4 text-base"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <DiscordIcon className="h-5 w-5" />
+                Continue with Discord
+              </motion.button>
+            </div>
+          </div>
         </FadeUp>
       </section>
 

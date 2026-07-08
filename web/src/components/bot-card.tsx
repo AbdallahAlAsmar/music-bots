@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 import type { BotDto } from "@/lib/types";
-import { botStatusTone, StatusBadge } from "@/components/status-badge";
+import { effectiveBotStatus, StatusBadge } from "@/components/status-badge";
 import { Equalizer } from "@/components/motion-primitives";
 import { AlertIcon, ArrowRightIcon, BotIcon, MicIcon } from "@/components/icons";
 
@@ -13,7 +13,7 @@ type BotCardProps = {
 
 export function BotCard({ bot }: BotCardProps) {
   const needsSetup = !bot.voice_channel_id;
-  const isActive = bot.status === "active";
+  const status = effectiveBotStatus(bot);
 
   return (
     <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 22 }} className="h-full">
@@ -36,12 +36,12 @@ export function BotCard({ bot }: BotCardProps) {
                 <h3 className="truncate text-lg font-semibold text-white transition-colors duration-200 group-hover:text-emerald-300">
                   {bot.display_name}
                 </h3>
-                {isActive ? <Equalizer className="h-3.5 shrink-0" /> : null}
+                {status.healthy ? <Equalizer className="h-3.5 shrink-0" /> : null}
               </div>
               <p className="mt-0.5 text-xs text-slate-500">Runtime: {bot.runtime_state ?? "unknown"}</p>
             </div>
           </div>
-          <StatusBadge label={bot.status} tone={botStatusTone(bot.status)} pulse={isActive} />
+          <StatusBadge label={status.label} tone={status.tone} pulse={status.pulse} />
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">

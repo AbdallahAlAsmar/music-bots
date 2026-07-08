@@ -7,6 +7,7 @@ import { fetchBot } from "@/lib/api";
 import { getStoredToken } from "@/lib/auth";
 import type { BotDto, SubscriptionDto } from "@/lib/types";
 import { BotEditor } from "@/components/bot-editor";
+import { BotRail } from "@/components/bot-rail";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { AlertIcon, ArrowLeftIcon } from "@/components/icons";
 
@@ -23,6 +24,10 @@ export default function BotDetailPage() {
       router.replace("/");
       return;
     }
+
+    setLoading(true);
+    setError(null);
+    setBot(null);
 
     void fetchBot(params.id)
       .then((result) => {
@@ -43,32 +48,38 @@ export default function BotDetailPage() {
         Back to my bots
       </Link>
 
-      {loading ? (
-        <div className="space-y-4" aria-busy="true" aria-label="Loading bot">
-          <div className="card animate-pulse p-6">
-            <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-2xl bg-white/5" />
-              <div className="space-y-2.5">
-                <div className="h-5 w-48 rounded bg-white/5" />
-                <div className="h-4 w-32 rounded bg-white/5" />
+      <div className="flex flex-col gap-5 lg:flex-row lg:gap-7">
+        <BotRail activeBotId={params.id} />
+
+        <div className="min-w-0 flex-1">
+          {loading ? (
+            <div className="space-y-4" aria-busy="true" aria-label="Loading bot">
+              <div className="card animate-pulse p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-20 w-20 rounded-2xl bg-white/5" />
+                  <div className="space-y-2.5">
+                    <div className="h-5 w-48 rounded bg-white/5" />
+                    <div className="h-4 w-32 rounded bg-white/5" />
+                  </div>
+                </div>
+              </div>
+              <div className="card h-48 animate-pulse" />
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="card flex items-start gap-3 border-rose-500/30 bg-rose-500/5 p-5">
+              <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+              <div>
+                <p className="font-medium text-rose-300">Could not load this bot</p>
+                <p className="mt-1 text-sm text-slate-400">{error}</p>
               </div>
             </div>
-          </div>
-          <div className="card h-48 animate-pulse" />
-        </div>
-      ) : null}
+          ) : null}
 
-      {error ? (
-        <div className="card flex items-start gap-3 border-rose-500/30 bg-rose-500/5 p-5">
-          <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
-          <div>
-            <p className="font-medium text-rose-300">Could not load this bot</p>
-            <p className="mt-1 text-sm text-slate-400">{error}</p>
-          </div>
+          {bot ? <BotEditor key={bot.id} initialBot={bot} initialSubscription={subscription} /> : null}
         </div>
-      ) : null}
-
-      {bot ? <BotEditor initialBot={bot} initialSubscription={subscription} /> : null}
+      </div>
     </DashboardShell>
   );
 }

@@ -14,12 +14,6 @@ import { useLiveData } from "@/hooks/use-live-data";
 
 type Filter = "all" | "active" | "needs-setup";
 const CONTACT_URL = process.env.NEXT_PUBLIC_CONTACT_URL || "https://discord.gg/pxvault";
-const PRICING_PLANS = [
-  { days: 1, label: "1-Day Trial" },
-  { days: 7, label: "Weekly" },
-  { days: 30, label: "Monthly" },
-  { days: 90, label: "Quarterly" }
-];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -137,22 +131,6 @@ export default function DashboardPage() {
               >
                 {label}
               </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Quick pricing view */}
-      {!loading ? (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Plans</h3>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {PRICING_PLANS.map((plan) => (
-              <div key={plan.days} className="card p-4">
-                <p className="text-xs text-emerald-300">{plan.days} days</p>
-                <p className="mt-1 font-medium text-white">{plan.label}</p>
-                <p className="mt-1 text-xs text-slate-500">Ask admin to provision this plan.</p>
-              </div>
             ))}
           </div>
         </div>

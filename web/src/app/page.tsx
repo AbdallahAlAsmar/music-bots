@@ -71,13 +71,6 @@ const steps = [
   }
 ];
 
-const pricingPlans = [
-  { days: 1, title: "1-Day Trial", note: "Perfect for testing setup and sound." },
-  { days: 7, title: "Weekly", note: "Great for small communities and events." },
-  { days: 30, title: "Monthly", note: "Best value for active music servers." },
-  { days: 90, title: "Quarterly", note: "For long-term communities and streamers." }
-];
-
 const faqs = [
   {
     q: "Do I still need to use slash commands?",
@@ -236,6 +229,9 @@ export default function HomePage() {
             </a>
             <a href="#how-it-works" className="cursor-pointer transition-colors duration-200 hover:text-white">
               How it works
+            </a>
+            <a href="#pricing" className="cursor-pointer transition-colors duration-200 hover:text-white">
+              Pricing
             </a>
           </div>
           <button type="button" onClick={handleLogin} className="btn-primary px-4 py-2">
@@ -472,26 +468,73 @@ export default function HomePage() {
       </section>
 
       {/* Pricing */}
-      <section className="border-t border-white/5 px-6 py-24">
+      <section id="pricing" className="scroll-mt-24 border-t border-white/5 px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <FadeUp inView className="mx-auto max-w-2xl text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-300">
               Plans
             </span>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Flexible subscription lengths</h2>
-            <p className="mt-4 text-lg text-slate-400">Choose the cycle that fits your Discord community.</p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Bot Pricing</h2>
+            <p className="mt-4 text-lg text-slate-400">Clear pricing in SR and USD for monthly and 3-month plans.</p>
           </FadeUp>
-          <Stagger className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4" gap={0.08}>
-            {pricingPlans.map((plan) => (
-              <StaggerItem key={plan.days}>
-                <div className="card h-full p-5">
-                  <p className="text-sm text-emerald-300">{plan.days} days</p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">{plan.title}</h3>
-                  <p className="mt-2 text-sm text-slate-400">{plan.note}</p>
-                </div>
-              </StaggerItem>
-            ))}
-          </Stagger>
+          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+            <div className="card overflow-hidden">
+              <div className="border-b border-white/10 px-5 py-4">
+                <h3 className="text-lg font-semibold text-white">3-Month Plan</h3>
+              </div>
+              <div className="scroll-thin overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white/5 text-slate-300">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Bots</th><th className="px-4 py-3 text-left">SR</th><th className="px-4 py-3 text-left">USD</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {[
+                      ["5 bots", "10 SR", "$2.67"],
+                      ["15 bots", "30 SR", "$8.00"],
+                      ["30 bots", "60 SR", "$16.00"],
+                      ["50 bots", "100 SR", "$26.67"],
+                      ["100 bots", "200 SR", "$53.33"]
+                    ].map((row) => (
+                      <tr key={row[0]} className="border-t border-white/10"><td className="px-4 py-3">{row[0]}</td><td className="px-4 py-3">{row[1]}</td><td className="px-4 py-3">{row[2]}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-white/10 px-5 py-4 text-sm text-slate-400">
+                One bot in 3-month plan: <span className="text-white">2 SR total ($0.53)</span> • Monthly equivalent: <span className="text-white">0.67 SR ($0.18)</span>
+              </div>
+            </div>
+            <div className="card overflow-hidden">
+              <div className="border-b border-white/10 px-5 py-4">
+                <h3 className="text-lg font-semibold text-white">Monthly Plan</h3>
+              </div>
+              <div className="scroll-thin overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white/5 text-slate-300">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Bots</th><th className="px-4 py-3 text-left">SR</th><th className="px-4 py-3 text-left">USD</th><th className="px-4 py-3 text-left">Cost/bot</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-200">
+                    {[
+                      ["5 bots", "5 SR", "$1.33", "$0.27/bot"],
+                      ["15 bots", "12 SR", "$3.20", "$0.21/bot"],
+                      ["30 bots", "25 SR", "$6.67", "$0.22/bot"],
+                      ["50 bots", "40 SR", "$10.67", "$0.21/bot"],
+                      ["100 bots", "80 SR", "$21.33", "$0.21/bot"]
+                    ].map((row) => (
+                      <tr key={row[0]} className="border-t border-white/10"><td className="px-4 py-3">{row[0]}</td><td className="px-4 py-3">{row[1]}</td><td className="px-4 py-3">{row[2]}</td><td className="px-4 py-3">{row[3]}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-white/10 px-5 py-4 text-sm text-slate-400">
+                3-month plan monthly equivalent is about <span className="text-emerald-300">$0.18/bot/month</span> vs monthly plan <span className="text-white">$0.21-$0.27/bot</span>.
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -45,7 +45,12 @@ export default function AdminPage() {
           <input className="field" placeholder="Bot token" value={form.token} onChange={(e) => setForm((p) => ({ ...p, token: e.target.value }))} />
           <input className="field" placeholder="Owner ID" value={form.owner_id} onChange={(e) => setForm((p) => ({ ...p, owner_id: e.target.value }))} />
           <input className="field" placeholder="Guild ID" value={form.guild_id} onChange={(e) => setForm((p) => ({ ...p, guild_id: e.target.value }))} />
-          <input className="field" placeholder="Plan days (1/7/30/90)" value={form.plan_days} onChange={(e) => setForm((p) => ({ ...p, plan_days: e.target.value }))} />
+          <select className="field" value={form.plan_days} onChange={(e) => setForm((p) => ({ ...p, plan_days: e.target.value }))}>
+            <option value="1">1 day</option>
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+          </select>
         </div>
         <button
           className="btn-primary mt-3"
@@ -71,10 +76,23 @@ export default function AdminPage() {
               <p className="text-xs text-slate-500">
                 {row.bot.id} • {row.subscription?.px_id ?? "No subscription"}
               </p>
+              <p className="text-xs text-slate-500">
+                Owner: {row.owner?.username ?? row.bot.owner_id} • Guild: {row.guild?.name ?? row.bot.guild_id}
+              </p>
             </div>
             <div className="flex gap-2">
-              <button className="btn-secondary" onClick={() => void adminExtendBot(row.bot.id, 30).then(load)}>
-                Extend 30d
+              <select
+                className="field h-9 min-w-[110px] px-2 py-1 text-xs"
+                defaultValue="30"
+                onChange={(e) => void adminExtendBot(row.bot.id, Number(e.target.value)).then(load)}
+              >
+                <option value="1">+1 day</option>
+                <option value="7">+7 days</option>
+                <option value="30">+30 days</option>
+                <option value="90">+90 days</option>
+              </select>
+              <button className="btn-secondary" onClick={() => router.push(`/dashboard/bots/${row.bot.id}`)}>
+                Configure
               </button>
               <button className="btn-danger" onClick={() => void adminRemoveBot(row.bot.id).then(load)}>
                 Remove

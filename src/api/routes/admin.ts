@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import type { BotManager } from "../../manager/bot-manager.js";
 import type { SubscriptionRepository } from "../../repositories/subscription-repository.js";
+import { decrypt } from "../../utils/crypto.js";
+import { env } from "../../config/env.js";
 import { isPlanDays } from "../../utils/subscription-plan.js";
 import { authMiddleware, type AuthVariables } from "../middleware/auth.js";
 import { adminMiddleware } from "../middleware/admin.js";
 import { toBotDto, toSubscriptionDto } from "../serializers.js";
+import { DiscordUserService } from "../../services/discord-user-service.js";
 
 type AdminRouteDeps = {
   manager: BotManager;
@@ -14,6 +17,7 @@ type AdminRouteDeps = {
 export function createAdminRoutes(deps: AdminRouteDeps): Hono<{ Variables: AuthVariables }> {
   const { manager, subRepo } = deps;
   const app = new Hono<{ Variables: AuthVariables }>();
+  const discordUsers = new DiscordUserService();
   app.use("*", authMiddleware);
   app.use("*", adminMiddleware);
 
@@ -25,10 +29,36 @@ export function createAdminRoutes(deps: AdminRouteDeps): Hono<{ Variables: AuthV
   app.get("/bots", async (c) => {
     const rows = await manager.listBotsForAdmin();
     const subscriptions = await Promise.all(rows.map((row) => subRepo.getActiveByBotId(row.bot.id)));
+    const ownerProfiles = await Promise.all(rows.map((row) => discordUsers.getUser(row.bot.owner_id)));
+    const guildNames = await Promise.all(
+      rows.map(async (row) => {
+        try {
+          const token = decrypt(row.bot.token, env.encryptionKey);
+          const response = await fetch(`https://discord.com/api/v10/guilds/${row.bot.guild_id}`, {
+            headers: { Authorization: `Bot ${token}` }
+          });
+          if (!response.ok) {
+            return row.bot.guild_id;
+          }
+          const guild = (await response.json()) as { name?: string };
+          return guild.name || row.bot.guild_id;
+        } catch {
+          return row.bot.guild_id;
+        }
+      })
+    );
     return c.json({
       bots: rows.map((row, index) => ({
         bot: toBotDto(row.bot),
-        subscription: subscriptions[index] ? toSubscriptionDto(subscriptions[index]!) : null
+        subscription: subscriptions[index] ? toSubscriptionDto(subscriptions[index]!) : null,
+        owner: {
+          id: row.bot.owner_id,
+          username: ownerProfiles[index]?.global_name ?? ownerProfiles[index]?.username ?? row.bot.owner_id
+        },
+        guild: {
+          id: row.bot.guild_id,
+          name: guildNames[index]
+        }
       }))
     });
   });

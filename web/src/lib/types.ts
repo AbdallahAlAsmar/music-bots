@@ -80,6 +80,8 @@ export type PlayerStateDto = {
 export type AdminBotRow = {
   bot: BotDto;
   subscription: SubscriptionDto | null;
+  owner?: { id: string; username: string };
+  guild?: { id: string; name: string };
 };
 
 export type AuditEntryDto = {

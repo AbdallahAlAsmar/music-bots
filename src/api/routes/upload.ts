@@ -42,10 +42,22 @@ export function createUploadRoutes(): Hono<{ Variables: AuthVariables }> {
     const ext = extensionFromType(file.type);
     const path = `${botId}/${kind}/${user.id}-${randomUUID()}.${ext}`;
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { error } = await supabase.storage.from(env.supabaseStorageBucket).upload(path, buffer, {
+    let { error } = await supabase.storage.from(env.supabaseStorageBucket).upload(path, buffer, {
       contentType: file.type,
       upsert: false
     });
+    if (error?.message?.toLowerCase().includes("bucket not found")) {
+      await supabase.storage.createBucket(env.supabaseStorageBucket, {
+        public: true,
+        fileSizeLimit: `${MAX_BYTES}`,
+        allowedMimeTypes: [...ALLOWED_TYPES]
+      });
+      const retry = await supabase.storage.from(env.supabaseStorageBucket).upload(path, buffer, {
+        contentType: file.type,
+        upsert: false
+      });
+      error = retry.error;
+    }
     if (error) {
       return c.json({ error: error.message }, 400);
     }

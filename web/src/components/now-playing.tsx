@@ -48,6 +48,13 @@ export function NowPlaying({ botId }: { botId: string }) {
     }
   }
 
+  function playFromInput() {
+    const value = query.trim();
+    if (!value || busy) return;
+    void runAction(() => playerPlay(botId, value));
+    setQuery("");
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="card p-5">
@@ -130,16 +137,17 @@ export function NowPlaying({ botId }: { botId: string }) {
             placeholder="Play query or URL..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                playFromInput();
+              }
+            }}
           />
           <button
             className="btn-primary shrink-0"
             disabled={busy || !query.trim()}
-            onClick={() => {
-              const value = query.trim();
-              if (!value) return;
-              void runAction(() => playerPlay(botId, value));
-              setQuery("");
-            }}
+            onClick={playFromInput}
           >
             <PlayIcon className="h-4 w-4" />
             Play

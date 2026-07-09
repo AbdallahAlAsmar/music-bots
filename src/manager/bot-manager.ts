@@ -592,12 +592,22 @@ export class BotManager {
     details?: Record<string, unknown>
   ): Promise<void> {
     if (!this.auditRepo) return;
-    await this.auditRepo.create({
-      bot_id: botId,
-      actor_id: actorId,
-      action,
-      details: details ?? null
-    });
+    try {
+      await this.auditRepo.create({
+        bot_id: botId,
+        actor_id: actorId,
+        action,
+        details: details ?? null
+      });
+    } catch (error) {
+      // Audit logging must never block user-facing actions (music controls, etc.).
+      logger.warn("Audit logging failed", {
+        botId,
+        actorId,
+        action,
+        error: (error as Error).message
+      });
+    }
   }
 
   private async acquireStartSlot(): Promise<void> {

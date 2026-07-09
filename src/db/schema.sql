@@ -54,7 +54,26 @@ create table if not exists public.bot_access (
   unique (bot_id, user_id)
 );
 
+create table if not exists public.discord_user_cache (
+  user_id text primary key,
+  username text not null,
+  global_name text,
+  avatar_url text,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.audit_log (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.bots(id) on delete cascade,
+  actor_id text not null,
+  action text not null,
+  details jsonb,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_bots_owner on public.bots(owner_id);
 create index if not exists idx_subscriptions_bot on public.subscriptions(bot_id);
 create index if not exists idx_subscriptions_active on public.subscriptions(active);
 create index if not exists idx_bot_access_lookup on public.bot_access(bot_id, user_id);
+create index if not exists idx_discord_user_cache_updated_at on public.discord_user_cache(updated_at);
+create index if not exists idx_audit_log_bot_created_at on public.audit_log(bot_id, created_at desc);

@@ -37,6 +37,10 @@ body {
   font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
 }
 
+html[dir="rtl"] body {
+  font-family: var(--font-arabic), var(--font-jakarta), system-ui, sans-serif;
+}
+
 ::selection {
   background: rgba(34, 197, 94, 0.3);
 }

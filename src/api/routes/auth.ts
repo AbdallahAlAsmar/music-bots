@@ -11,10 +11,14 @@ export function createAuthRoutes(): Hono<{ Variables: AuthVariables }> {
       return c.json({ error: "API is not configured" }, 503);
     }
 
-    const body = await c.req.json<{ code?: string }>().catch(() => ({ code: undefined }));
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({ code: undefined, state: undefined }));
     const code = body.code?.trim();
+    const state = body.state?.trim();
     if (!code) {
       return c.json({ error: "Missing OAuth code" }, 400);
+    }
+    if (!state || state.length < 8) {
+      return c.json({ error: "Missing OAuth state" }, 400);
     }
 
     const params = new URLSearchParams({

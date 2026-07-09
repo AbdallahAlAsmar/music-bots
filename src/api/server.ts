@@ -9,7 +9,10 @@ import { corsMiddleware } from "./middleware/cors.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createBotRoutes } from "./routes/bots.js";
+import { createAdminRoutes } from "./routes/admin.js";
 import { createLicenseRoutes } from "./routes/licenses.js";
+import { createUploadRoutes } from "./routes/upload.js";
+import { DiscordUserService } from "../services/discord-user-service.js";
 
 export function createApiApp(
   manager: BotManager,
@@ -17,6 +20,7 @@ export function createApiApp(
   accessRepo: AccessRepository
 ): Hono {
   const app = new Hono();
+  const discordUserService = new DiscordUserService();
 
   app.use("*", corsMiddleware);
 
@@ -29,9 +33,11 @@ export function createApiApp(
   );
 
   app.route("/api/auth", createAuthRoutes());
+  app.route("/api/upload", createUploadRoutes());
+  app.route("/api/admin", createAdminRoutes({ manager, subRepo }));
   app.route(
     "/api/bots",
-    createBotRoutes({ manager, subRepo, accessRepo }).use("*", rateLimitMiddleware(120, 60_000))
+    createBotRoutes({ manager, subRepo, accessRepo, discordUserService }).use("*", rateLimitMiddleware(120, 60_000))
   );
 
   // PX License endpoints (/, /validate, /check, /health) share this port so

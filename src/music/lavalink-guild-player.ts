@@ -58,6 +58,7 @@ export class LavalinkGuildPlayer {
   private volume = 80;
   private guildId: string | null = null;
   private lastError: string | null = null;
+  private paused = false;
   private isAdvancing = false;
   private skipRequested = false;
   private stopRequested = false;
@@ -201,6 +202,7 @@ export class LavalinkGuildPlayer {
     if (!this.lavalinkPlayer || !this.nowPlaying) {
       return false;
     }
+    this.paused = true;
     this.runPlayerCommand(this.lavalinkPlayer.setPaused(true));
     return true;
   }
@@ -209,6 +211,7 @@ export class LavalinkGuildPlayer {
     if (!this.lavalinkPlayer || !this.nowPlaying) {
       return false;
     }
+    this.paused = false;
     this.runPlayerCommand(this.lavalinkPlayer.setPaused(false));
     return true;
   }
@@ -218,6 +221,7 @@ export class LavalinkGuildPlayer {
     this.skipRequested = false;
     this.queue.length = 0;
     this.nowPlaying = null;
+    this.paused = false;
 
     if (this.lavalinkPlayer) {
       this.runPlayerCommand(this.lavalinkPlayer.stopTrack());
@@ -287,6 +291,10 @@ export class LavalinkGuildPlayer {
 
   getNowPlaying(): Track | null {
     return this.nowPlaying;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   getLastError(): string | null {
@@ -663,6 +671,7 @@ export class LavalinkGuildPlayer {
 
     this.lavalinkPlayer.on("start", (event) => {
       this.nowPlaying = this.mergeNowPlayingWithStartedTrack(event.track);
+      this.paused = false;
     });
 
     this.lavalinkPlayer.on("exception", (event) => {
@@ -698,6 +707,7 @@ export class LavalinkGuildPlayer {
 
     this.skipRequested = false;
     this.nowPlaying = null;
+    this.paused = false;
     await this.advance();
     await this.advance(true);
   }

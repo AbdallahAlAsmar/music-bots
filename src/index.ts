@@ -5,10 +5,12 @@ import { logger } from "./core/logger.js";
 import { BotRepository } from "./repositories/bot-repository.js";
 import { SubscriptionRepository } from "./repositories/subscription-repository.js";
 import { AccessRepository } from "./repositories/access-repository.js";
+import { AuditRepository } from "./repositories/audit-repository.js";
 import { BotManager } from "./manager/bot-manager.js";
 import { ControlBot } from "./control/control-bot.js";
 import { SubscriptionWorker } from "./workers/subscription-worker.js";
 import { startApiServer } from "./api/server.js";
+import { NotificationService } from "./services/notification-service.js";
 
 dns.setDefaultResultOrder("ipv4first");
 
@@ -52,8 +54,10 @@ async function main(): Promise<void> {
       const botRepo = new BotRepository();
       const subRepo = new SubscriptionRepository();
       const accessRepo = new AccessRepository();
+      const auditRepo = new AuditRepository();
+      const notifications = new NotificationService(botRepo);
 
-      const manager = new BotManager(botRepo, subRepo, accessRepo);
+      const manager = new BotManager(botRepo, subRepo, accessRepo, notifications, auditRepo);
       await manager.bootstrap();
       logger.info("Manager bootstrap complete", { activeRuntimes: manager.size });
 
@@ -62,7 +66,7 @@ async function main(): Promise<void> {
       const controlBot = new ControlBot(manager, subRepo);
       await controlBot.start();
 
-      const worker = new SubscriptionWorker(manager, botRepo, subRepo);
+      const worker = new SubscriptionWorker(manager, botRepo, subRepo, notifications);
       worker.start(env.subscriptionCheckIntervalMs);
       logger.info("Subscription worker started", { intervalMs: env.subscriptionCheckIntervalMs });
       return;

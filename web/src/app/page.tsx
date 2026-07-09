@@ -71,6 +71,32 @@ const steps = [
   }
 ];
 
+const pricingPlans = [
+  { days: 1, title: "1-Day Trial", note: "Perfect for testing setup and sound." },
+  { days: 7, title: "Weekly", note: "Great for small communities and events." },
+  { days: 30, title: "Monthly", note: "Best value for active music servers." },
+  { days: 90, title: "Quarterly", note: "For long-term communities and streamers." }
+];
+
+const faqs = [
+  {
+    q: "Do I still need to use slash commands?",
+    a: "No. You can do setup, status, channel selection, and management from the dashboard."
+  },
+  {
+    q: "Can I share access with staff?",
+    a: "Yes. Add team members as Admin or Viewer from the Access tab for each bot."
+  },
+  {
+    q: "Why does my bot show needs setup?",
+    a: "The bot needs a configured voice channel before it can run fully in your server."
+  },
+  {
+    q: "Is Arabic supported?",
+    a: "Yes. Switch language to Arabic from the dashboard header and the interface flips RTL."
+  }
+];
+
 const mockBots = [
   { name: "PXVault 1", state: "Playing music", online: true, playing: true },
   { name: "PXVault 2", state: "Ready in Lounge", online: true, playing: false },
@@ -442,6 +468,50 @@ export default function HomePage() {
               </ul>
             </div>
           </FadeUp>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="border-t border-white/5 px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <FadeUp inView className="mx-auto max-w-2xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-300">
+              Plans
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Flexible subscription lengths</h2>
+            <p className="mt-4 text-lg text-slate-400">Choose the cycle that fits your Discord community.</p>
+          </FadeUp>
+          <Stagger className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4" gap={0.08}>
+            {pricingPlans.map((plan) => (
+              <StaggerItem key={plan.days}>
+                <div className="card h-full p-5">
+                  <p className="text-sm text-emerald-300">{plan.days} days</p>
+                  <h3 className="mt-2 text-xl font-semibold text-white">{plan.title}</h3>
+                  <p className="mt-2 text-sm text-slate-400">{plan.note}</p>
+                </div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="border-t border-white/5 bg-slate-950/40 px-6 py-24">
+        <div className="mx-auto max-w-4xl">
+          <FadeUp inView className="mx-auto max-w-2xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-300">
+              FAQ
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Common questions</h2>
+          </FadeUp>
+          <div className="mt-12 space-y-3">
+            {faqs.map((faq) => (
+              <details key={faq.q} className="card group overflow-hidden p-5">
+                <summary className="cursor-pointer list-none font-medium text-white">{faq.q}</summary>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{faq.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 

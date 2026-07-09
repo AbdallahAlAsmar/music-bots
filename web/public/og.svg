@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#020617"/>
+  <defs>
+    <linearGradient id="g" x1="220" y1="170" x2="980" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#4ade80"/>
+    </linearGradient>
+  </defs>
+  <circle cx="880" cy="120" r="220" fill="#22c55e" fill-opacity=".08"/>
+  <circle cx="230" cy="580" r="250" fill="#22c55e" fill-opacity=".08"/>
+  <rect x="120" y="120" width="960" height="390" rx="32" fill="#0f172a" stroke="#22c55e" stroke-opacity=".25"/>
+  <text x="170" y="235" fill="#f8fafc" font-size="66" font-family="Inter, Arial, sans-serif" font-weight="700">PXVault</text>
+  <text x="170" y="305" fill="url(#g)" font-size="50" font-family="Inter, Arial, sans-serif" font-weight="700">Discord Music Bot Dashboard</text>
+  <text x="170" y="370" fill="#94a3b8" font-size="32" font-family="Inter, Arial, sans-serif">Manage, monitor, and control every bot from one panel.</text>
+  <text x="170" y="420" fill="#94a3b8" font-size="32" font-family="Inter, Arial, sans-serif">No slash-command juggling required.</text>
+</svg>

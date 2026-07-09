@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 /**
  * Where API requests get proxied server-side. The bot host (fi7) only speaks
@@ -8,6 +9,9 @@ import type { NextConfig } from "next";
 const apiProxyTarget = process.env.API_PROXY_TARGET ?? "http://localhost:21024";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.join(__dirname)
+  },
   async rewrites() {
     return [
       {

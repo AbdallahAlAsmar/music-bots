@@ -22,6 +22,7 @@ export const env = {
   controlBotToken: required("CONTROL_BOT_TOKEN"),
   supabaseUrl: required("SUPABASE_URL"),
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
+  supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET ?? "bot-assets",
   encryptionKey: required("ENCRYPTION_KEY"),
   defaultGuildId: required("DEFAULT_GUILD_ID"),
   lavalinkHost: process.env.LAVALINK_HOST ?? "127.0.0.1:2333", // legacy, unused if lavalinkNodes is set
@@ -81,6 +82,8 @@ export const env = {
   discordRedirectUri: process.env.DISCORD_REDIRECT_URI ?? "",
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET ?? "",
+  adminGuildId: process.env.ADMIN_GUILD_ID ?? "",
+  adminRoleId: process.env.ADMIN_ROLE_ID ?? "",
   // Optional: separate Supabase project holding the PX licenses table.
   // Falls back to the main Supabase client when unset.
   licenseSupabaseUrl: process.env.LICENSE_SUPABASE_URL ?? "",

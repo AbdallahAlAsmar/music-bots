@@ -4,14 +4,16 @@ import type { BotManager } from "../../manager/bot-manager.js";
 import type { AccessRepository } from "../../repositories/access-repository.js";
 import type { SubscriptionRepository } from "../../repositories/subscription-repository.js";
 import type { ActivityKind } from "../../core/types.js";
+import type { DiscordUserService } from "../../services/discord-user-service.js";
 import { buildBotInviteLink } from "../../utils/discord-invite.js";
 import { authMiddleware, type AuthVariables } from "../middleware/auth.js";
-import { toBotDto, toSubscriptionDto } from "../serializers.js";
+import { toBotDto, toPlayerStateDto, toSubscriptionDto } from "../serializers.js";
 
 type BotRouteDeps = {
   manager: BotManager;
   subRepo: SubscriptionRepository;
   accessRepo: AccessRepository;
+  discordUserService: DiscordUserService;
 };
 
 function mapError(error: unknown): { status: ContentfulStatusCode; message: string } {
@@ -29,8 +31,20 @@ function mapError(error: unknown): { status: ContentfulStatusCode; message: stri
 }
 
 export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVariables }> {
-  const { manager, subRepo, accessRepo } = deps;
+  const { manager, subRepo, accessRepo, discordUserService } = deps;
   const app = new Hono<{ Variables: AuthVariables }>();
+
+  async function listAccessWithProfiles(botId: string) {
+    const rows = await accessRepo.list(botId);
+    const users = await Promise.all(rows.map((row) => discordUserService.getUser(row.user_id)));
+    return rows.map((row, index) => ({
+      user_id: row.user_id,
+      role: row.role,
+      created_at: row.created_at,
+      username: users[index]?.global_name ?? users[index]?.username ?? null,
+      avatar_url: users[index]?.avatar_url ?? null
+    }));
+  }
 
   app.use("*", authMiddleware);
 
@@ -112,6 +126,110 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     }
   });
 
+  app.get("/:id/player", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.getMusicStateForUser(user.id, botId);
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/pause", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "pause");
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/resume", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "resume");
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/skip", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "skip");
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/play", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ query?: string }>();
+    if (!body.query?.trim()) {
+      return c.json({ error: "query is required" }, 400);
+    }
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "play", { query: body.query.trim() });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/stop", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "stop");
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.patch("/:id/player/volume", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ percent?: number }>();
+    if (!Number.isFinite(body.percent)) {
+      return c.json({ error: "percent is required" }, 400);
+    }
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "volume", { volume: body.percent });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.get("/:id/audit", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const rows = await manager.listAuditForUser(user.id, botId, 50);
+      return c.json({ audit: rows });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
   app.get("/:id/channels", async (c) => {
     const user = c.get("user");
     const botId = c.req.param("id");
@@ -181,14 +299,8 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
 
     try {
       await manager.assertManagePermission(botId, user.id);
-      const rows = await accessRepo.list(botId);
-      return c.json({
-        access: rows.map((row) => ({
-          user_id: row.user_id,
-          role: row.role,
-          created_at: row.created_at
-        }))
-      });
+      const access = await listAccessWithProfiles(botId);
+      return c.json({ access });
     } catch (error) {
       const mapped = mapError(error);
       return c.json({ error: mapped.message }, mapped.status);
@@ -203,17 +315,16 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     if (!body.user_id?.trim() || (body.role !== "admin" && body.role !== "viewer")) {
       return c.json({ error: "user_id and role (admin|viewer) are required" }, 400);
     }
+    const targetUserId = body.user_id.trim();
+    const validUser = await discordUserService.validateUserExists(targetUserId);
+    if (!validUser) {
+      return c.json({ error: "Discord user not found. Please check the ID." }, 400);
+    }
 
     try {
-      await manager.grantAccess(user.id, botId, body.user_id.trim(), body.role);
-      const rows = await accessRepo.list(botId);
-      return c.json({
-        access: rows.map((row) => ({
-          user_id: row.user_id,
-          role: row.role,
-          created_at: row.created_at
-        }))
-      });
+      await manager.grantAccess(user.id, botId, targetUserId, body.role);
+      const access = await listAccessWithProfiles(botId);
+      return c.json({ access });
     } catch (error) {
       const mapped = mapError(error);
       return c.json({ error: mapped.message }, mapped.status);
@@ -227,14 +338,8 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
 
     try {
       await manager.revokeAccess(user.id, botId, targetUserId);
-      const rows = await accessRepo.list(botId);
-      return c.json({
-        access: rows.map((row) => ({
-          user_id: row.user_id,
-          role: row.role,
-          created_at: row.created_at
-        }))
-      });
+      const access = await listAccessWithProfiles(botId);
+      return c.json({ access });
     } catch (error) {
       const mapped = mapError(error);
       return c.json({ error: mapped.message }, mapped.status);

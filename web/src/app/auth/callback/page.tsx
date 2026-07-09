@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { exchangeDiscordCode } from "@/lib/api";
-import { storeSession } from "@/lib/auth";
+import { storeSession, validateAndConsumeOAuthState } from "@/lib/auth";
 import { AlertIcon, MusicIcon } from "@/components/icons";
 
 function AuthCallbackContent() {
@@ -15,12 +15,17 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const code = searchParams.get("code");
+    const state = searchParams.get("state");
     if (!code) {
       setError("Missing OAuth code. Please try signing in again.");
       return;
     }
+    if (!validateAndConsumeOAuthState(state)) {
+      setError("Invalid OAuth state. Please try signing in again.");
+      return;
+    }
 
-    void exchangeDiscordCode(code)
+    void exchangeDiscordCode(code, state!)
       .then((session) => {
         storeSession(session.token, session.user);
         router.replace("/dashboard");

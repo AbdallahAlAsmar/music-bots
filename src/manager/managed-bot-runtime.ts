@@ -193,6 +193,71 @@ export class ManagedBotRuntime {
     return this._player;
   }
 
+  getMusicState(): {
+    nowPlaying: Track | null;
+    queue: Track[];
+    volume: number;
+    loop: LoopMode;
+    isPaused: boolean;
+    isConnected: boolean;
+  } {
+    const player = this.player;
+    return {
+      nowPlaying: player.getNowPlaying(),
+      queue: player.getQueue(),
+      volume: player.getVolume(),
+      loop: player.getLoop(),
+      isPaused: player.isPaused(),
+      isConnected: player.hasActiveVoiceSession()
+    };
+  }
+
+  async controlMusic(
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume",
+    payload?: { query?: string; volume?: number; requesterId?: string }
+  ): Promise<void> {
+    const player = this.player;
+    if (action === "pause") {
+      if (!player.pause()) {
+        throw new Error("Nothing is playing");
+      }
+      return;
+    }
+    if (action === "resume") {
+      if (!player.resume()) {
+        throw new Error("Nothing is paused");
+      }
+      return;
+    }
+    if (action === "skip") {
+      player.skip();
+      return;
+    }
+    if (action === "stop") {
+      player.stop();
+      return;
+    }
+    if (action === "volume") {
+      const volume = payload?.volume;
+      if (!Number.isFinite(volume)) {
+        throw new Error("volume is required");
+      }
+      player.setVolume(Number(volume));
+      return;
+    }
+    if (action === "play") {
+      const query = payload?.query?.trim();
+      if (!query) {
+        throw new Error("query is required");
+      }
+      if (!this.botData.voice_channel_id) {
+        throw new Error("Set a voice channel first");
+      }
+      await this.joinAssignedVoice();
+      await player.add(query, payload?.requesterId ? `web:${payload.requesterId}` : "web");
+    }
+  }
+
   async start(): Promise<void> {
     this.client.once("clientReady", async () => {
       const readyName = this.client.user?.username ?? this.botData.name ?? "Unnamed Bot";

@@ -47,9 +47,46 @@ export type AccessDto = {
   user_id: string;
   role: "owner" | "admin" | "viewer";
   created_at: string;
+  username?: string | null;
+  avatar_url?: string | null;
 };
 
 export type AuthUser = {
   id: string;
   username: string;
+};
+
+export type PlayerTrack = {
+  title: string;
+  url: string;
+  duration: string;
+  thumbnail: string | null;
+  requestedBy: string;
+  sourceQuery?: string;
+  artistName?: string;
+  albumName?: string;
+  durationSeconds?: number;
+};
+
+export type PlayerStateDto = {
+  nowPlaying: PlayerTrack | null;
+  queue: PlayerTrack[];
+  volume: number;
+  loop: "off" | "track" | "queue";
+  isPaused: boolean;
+  isConnected: boolean;
+};
+
+export type AdminBotRow = {
+  bot: BotDto;
+  subscription: SubscriptionDto | null;
+};
+
+export type AuditEntryDto = {
+  id: string;
+  bot_id: string;
+  actor_id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
 };

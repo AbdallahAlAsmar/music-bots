@@ -7,6 +7,7 @@ import { fetchBots } from "@/lib/api";
 import type { BotDto } from "@/lib/types";
 import { effectiveBotStatus } from "@/components/status-badge";
 import { BotIcon, LayoutGridIcon } from "@/components/icons";
+import { useLiveData } from "@/hooks/use-live-data";
 
 const dotColor: Record<string, string> = {
   green: "bg-emerald-400",
@@ -24,11 +25,22 @@ const dotColor: Record<string, string> = {
 export function BotRail({ activeBotId }: { activeBotId: string }) {
   const [bots, setBots] = useState<BotDto[]>([]);
 
+  async function loadBots() {
+    try {
+      const result = await fetchBots();
+      setBots(result.bots);
+    } catch {
+      setBots([]);
+    }
+  }
+
   useEffect(() => {
-    void fetchBots()
-      .then((result) => setBots(result.bots))
-      .catch(() => setBots([]));
+    void loadBots();
   }, []);
+
+  useLiveData(async () => {
+    await loadBots();
+  }, 10_000);
 
   if (bots.length < 2) {
     return null;

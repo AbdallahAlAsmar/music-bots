@@ -1,4 +1,5 @@
 import type { AccessRole, BotEntity, SubscriptionEntity } from "../core/types.js";
+import type { MusicStateSnapshot } from "../manager/bot-manager.js";
 import { botDisplayName, botUserIdFromToken } from "../utils/bot-token.js";
 import { toPxSubscriptionId } from "../utils/subscription-id.js";
 import { planLabel } from "../utils/subscription-plan.js";
@@ -21,7 +22,11 @@ export type AccessDto = {
   user_id: string;
   role: AccessRole;
   created_at: string;
+  username?: string | null;
+  avatar_url?: string | null;
 };
+
+export type PlayerStateDto = MusicStateSnapshot;
 
 export function toBotDto(bot: BotEntity): BotDto {
   const { token: _token, ...rest } = bot;
@@ -41,4 +46,8 @@ export function toSubscriptionDto(sub: SubscriptionEntity): SubscriptionDto {
     end_date: sub.end_date,
     active: sub.active
   };
+}
+
+export function toPlayerStateDto(state: MusicStateSnapshot): PlayerStateDto {
+  return state;
 }

@@ -136,6 +136,18 @@ Open `http://localhost:3000`.
 | fi7 port unreachable | Confirm fi7 allows inbound HTTP on port 21024 from the public internet |
 | `Cannot find package 'hono'` on startup | Upload `package.json` + `package-lock.json` with your build, then run `npm install --omit=dev` before start (or use `npm start`, which installs automatically) |
 
+## Cloudflare hardening (recommended)
+
+To avoid exposing the raw fi7 host and improve reliability, put Cloudflare in front:
+
+1. Create a Cloudflare Tunnel from fi7 to local `http://localhost:21024`.
+2. Map a hostname like `api.your-domain.com` to that tunnel.
+3. Set Vercel `API_PROXY_TARGET=https://api.your-domain.com`.
+4. Keep `WEB_ORIGIN=https://your-dashboard.vercel.app` in the backend env.
+5. Enable Cloudflare WAF + rate limits on `/api/*`.
+
+This gives TLS termination, hides your origin IP, and keeps the same dashboard code.
+
 ## Security notes
 
 - Bot tokens are encrypted in Supabase and never returned by the API

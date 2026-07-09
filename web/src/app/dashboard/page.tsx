@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchBots } from "@/lib/api";
 import { getStoredToken } from "@/lib/auth";
@@ -10,8 +10,10 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { effectiveBotStatus } from "@/components/status-badge";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion-primitives";
 import { ActivityIcon, AlertIcon, BotIcon, SearchIcon, ZapIcon } from "@/components/icons";
+import { useLiveData } from "@/hooks/use-live-data";
 
 type Filter = "all" | "active" | "needs-setup";
+const CONTACT_URL = process.env.NEXT_PUBLIC_CONTACT_URL || "https://discord.gg/pxvault";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,17 +23,37 @@ export default function DashboardPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
-  useEffect(() => {
-    if (!getStoredToken()) {
-      router.replace("/");
-      return;
-    }
+  const loadBots = useCallback(
+    async (silent = false) => {
+      if (!getStoredToken()) {
+        router.replace("/");
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+      }
+      try {
+        const result = await fetchBots();
+        setBots(result.bots);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load bots");
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [router]
+  );
 
-    void fetchBots()
-      .then((result) => setBots(result.bots))
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [router]);
+  useEffect(() => {
+    void loadBots();
+  }, [loadBots]);
+
+  useLiveData(async () => {
+    await loadBots(true);
+  }, 10_000);
 
   const stats = useMemo(() => {
     const active = bots.filter((bot) => effectiveBotStatus(bot).healthy).length;
@@ -151,10 +173,16 @@ export default function DashboardPage() {
           </span>
           <h3 className="mt-5 text-xl font-semibold text-white">No bots yet</h3>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-400">
-            You don&apos;t have any bots assigned to your Discord account. Ask a platform admin to add one for you
-            using the <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs">/addbot</code> command, then refresh
-            this page.
+            You don&apos;t have any bots assigned yet.
           </p>
+          <ol className="mx-auto mt-4 max-w-md space-y-1 text-left text-sm text-slate-400">
+            <li>1. Contact the PXVault team and request a bot.</li>
+            <li>2. Platform admin provisions it for your Discord account.</li>
+            <li>3. Refresh this page and start customizing.</li>
+          </ol>
+          <a href={CONTACT_URL} target="_blank" rel="noreferrer" className="btn-primary mt-5">
+            Contact support
+          </a>
         </div>
       ) : null}
 

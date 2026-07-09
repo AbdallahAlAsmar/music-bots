@@ -9,8 +9,18 @@ import { ManagedBotRuntime } from "./managed-bot-runtime.js";
 import { logger } from "../core/logger.js";
 import { normalizePxSubscriptionId, toPxSubscriptionId } from "../utils/subscription-id.js";
 import type { PlanDays } from "../utils/subscription-plan.js";
+import type { NotificationService } from "../services/notification-service.js";
+import type { AuditRepository } from "../repositories/audit-repository.js";
 
 type BotHealthPatch = Pick<BotEntity, "runtime_state" | "last_error" | "last_ready_at" | "last_command_at" | "health_updated_at">;
+export type MusicStateSnapshot = {
+  nowPlaying: import("../music/types.js").Track | null;
+  queue: import("../music/types.js").Track[];
+  volume: number;
+  loop: import("../music/types.js").LoopMode;
+  isPaused: boolean;
+  isConnected: boolean;
+};
 
 export class BotManager {
   private readonly runtimes = new Map<string, ManagedBotRuntime>();
@@ -22,7 +32,9 @@ export class BotManager {
   constructor(
     private readonly botRepo: BotRepository,
     private readonly subRepo: SubscriptionRepository,
-    private readonly accessRepo: AccessRepository
+    private readonly accessRepo: AccessRepository,
+    private readonly notifications?: NotificationService,
+    private readonly auditRepo?: AuditRepository
   ) {
     this.permissionService = new PermissionService(accessRepo);
   }
@@ -178,11 +190,13 @@ export class BotManager {
   async grantAccess(requesterId: string, botId: string, targetUserId: string, role: "admin" | "viewer"): Promise<void> {
     await this.permissionService.assertRole(botId, requesterId, "owner");
     await this.accessRepo.grant(botId, targetUserId, role);
+    await this.writeAudit(botId, requesterId, "grant_access", { targetUserId, role });
   }
 
   async revokeAccess(requesterId: string, botId: string, targetUserId: string): Promise<void> {
     await this.permissionService.assertRole(botId, requesterId, "owner");
     await this.accessRepo.revoke(botId, targetUserId);
+    await this.writeAudit(botId, requesterId, "revoke_access", { targetUserId });
   }
 
   async updateBotProfile(
@@ -198,6 +212,7 @@ export class BotManager {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     await this.botRepo.update(botId, patch);
     await this.refreshRuntime(botId);
+    await this.writeAudit(botId, requesterId, "update_profile", patch as Record<string, unknown>);
   }
 
   async getUserBots(userId: string): Promise<BotEntity[]> {
@@ -309,16 +324,19 @@ export class BotManager {
     } else {
       await this.refreshRuntime(botId);
     }
+    await this.writeAudit(botId, requesterId, "update_guild", { guildId });
   }
 
   async pauseBotForUser(requesterId: string, botId: string): Promise<void> {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     await this.pauseBot(botId);
+    await this.writeAudit(botId, requesterId, "pause_runtime");
   }
 
   async resumeBotForUser(requesterId: string, botId: string): Promise<void> {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     await this.resumeBot(botId);
+    await this.writeAudit(botId, requesterId, "resume_runtime");
   }
 
   async getOwnedBots(userId: string): Promise<BotEntity[]> {
@@ -518,6 +536,39 @@ export class BotManager {
     return bot.id;
   }
 
+  async getMusicStateForUser(requesterId: string, botId: string): Promise<MusicStateSnapshot> {
+    await this.permissionService.assertRole(botId, requesterId, "viewer");
+    const runtime = this.runtimes.get(botId);
+    if (!runtime) {
+      throw new Error("Bot runtime is not running");
+    }
+    return runtime.getMusicState();
+  }
+
+  async controlMusicForUser(
+    requesterId: string,
+    botId: string,
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume",
+    payload?: { query?: string; volume?: number }
+  ): Promise<MusicStateSnapshot> {
+    await this.permissionService.assertRole(botId, requesterId, "admin");
+    const runtime = this.runtimes.get(botId);
+    if (!runtime) {
+      throw new Error("Bot runtime is not running");
+    }
+    await runtime.controlMusic(action, { ...payload, requesterId });
+    await this.writeAudit(botId, requesterId, `music_${action}`, payload as Record<string, unknown>);
+    return runtime.getMusicState();
+  }
+
+  async listAuditForUser(requesterId: string, botId: string, limit = 50) {
+    await this.permissionService.assertRole(botId, requesterId, "viewer");
+    if (!this.auditRepo) {
+      return [];
+    }
+    return this.auditRepo.listByBotId(botId, limit);
+  }
+
   private async refreshRuntime(botId: string): Promise<void> {
     const runtime = this.runtimes.get(botId);
     if (!runtime) {
@@ -532,6 +583,21 @@ export class BotManager {
 
   private async updateBotHealth(botId: string, patch: Partial<BotHealthPatch>): Promise<void> {
     await this.botRepo.update(botId, patch as Partial<BotEntity>);
+  }
+
+  private async writeAudit(
+    botId: string,
+    actorId: string,
+    action: string,
+    details?: Record<string, unknown>
+  ): Promise<void> {
+    if (!this.auditRepo) return;
+    await this.auditRepo.create({
+      bot_id: botId,
+      actor_id: actorId,
+      action,
+      details: details ?? null
+    });
   }
 
   private async acquireStartSlot(): Promise<void> {
@@ -585,6 +651,10 @@ export class BotManager {
         },
         async (id, reason) => {
           logger.warn("Runtime fault detected", { botId: id, reason });
+          const bot = await this.botRepo.findById(id).catch(() => null);
+          if (bot?.owner_id) {
+            void this.notifications?.notifyRuntimeError(bot.owner_id, id, reason);
+          }
           await this.updateBotHealth(id, {
             runtime_state: "error",
             last_error: reason,

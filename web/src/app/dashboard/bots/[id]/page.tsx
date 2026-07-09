@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { fetchBot } from "@/lib/api";
 import { getStoredToken } from "@/lib/auth";
@@ -10,6 +10,7 @@ import { BotEditor } from "@/components/bot-editor";
 import { BotRail } from "@/components/bot-rail";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { AlertIcon, ArrowLeftIcon } from "@/components/icons";
+import { useLiveData } from "@/hooks/use-live-data";
 
 export default function BotDetailPage() {
   const router = useRouter();
@@ -19,24 +20,39 @@ export default function BotDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!getStoredToken()) {
-      router.replace("/");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setBot(null);
-
-    void fetchBot(params.id)
-      .then((result) => {
+  const loadBot = useCallback(
+    async (silent = false) => {
+      if (!getStoredToken()) {
+        router.replace("/");
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+      }
+      try {
+        const result = await fetchBot(params.id);
         setBot(result.bot);
         setSubscription(result.subscription);
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [params.id, router]);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load bot");
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [params.id, router]
+  );
+
+  useEffect(() => {
+    setBot(null);
+    void loadBot();
+  }, [loadBot]);
+
+  useLiveData(async () => {
+    await loadBot(true);
+  }, 10_000);
 
   return (
     <DashboardShell title="Bot settings">

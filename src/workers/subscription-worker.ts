@@ -3,6 +3,8 @@ import { BotRepository } from "../repositories/bot-repository.js";
 import { SubscriptionRepository } from "../repositories/subscription-repository.js";
 import { logger } from "../core/logger.js";
 import { isTransientNetworkError } from "../utils/network-errors.js";
+import { toPxSubscriptionId } from "../utils/subscription-id.js";
+import type { NotificationService } from "../services/notification-service.js";
 
 export class SubscriptionWorker {
   private readonly reminderThresholds = [
@@ -17,7 +19,8 @@ export class SubscriptionWorker {
   constructor(
     private readonly manager: BotManager,
     private readonly botRepo: BotRepository,
-    private readonly subRepo: SubscriptionRepository
+    private readonly subRepo: SubscriptionRepository,
+    private readonly notifications?: NotificationService
   ) {}
 
   start(intervalMs: number): NodeJS.Timeout {
@@ -33,6 +36,10 @@ export class SubscriptionWorker {
           await this.subRepo.deactivate(sub.id);
           await this.manager.stop(sub.bot_id);
           await this.botRepo.update(sub.bot_id, { status: "expired" });
+          const bot = await this.botRepo.findById(sub.bot_id);
+          if (bot?.owner_id) {
+            void this.notifications?.notifySubscriptionExpired(bot.owner_id, toPxSubscriptionId(sub.id));
+          }
           logger.warn("Subscription expired and bot locked", { botId: sub.bot_id, subscriptionId: sub.id });
         }
 
@@ -60,6 +67,14 @@ export class SubscriptionWorker {
               reminderThreshold: threshold.label,
               endDate: sub.end_date
             });
+            if (bot?.owner_id) {
+              void this.notifications?.notifySubscriptionReminder(
+                bot.owner_id,
+                toPxSubscriptionId(sub.id),
+                threshold.label,
+                sub.end_date
+              );
+            }
           }
         }
         this.consecutiveTransientFailures = 0;

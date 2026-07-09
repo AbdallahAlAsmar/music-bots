@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   fetchAccess,
+  fetchAudit,
   fetchChannels,
   fetchGuilds,
   fetchInvite,
@@ -11,12 +12,15 @@ import {
   revokeAccess,
   startBot,
   stopBot,
+  uploadBotAsset,
   updateBot,
   updateGuild
 } from "@/lib/api";
-import type { AccessDto, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "@/lib/types";
+import type { AccessDto, AuditEntryDto, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "@/lib/types";
 import { effectiveBotStatus, runtimeTone, StatusBadge } from "@/components/status-badge";
+import { NowPlaying } from "@/components/now-playing";
 import { Select } from "@/components/select";
+import { useLocale } from "@/components/locale-provider";
 import {
   AlertIcon,
   BotIcon,
@@ -29,6 +33,7 @@ import {
   ImageIcon,
   LinkIcon,
   MicIcon,
+  MusicIcon,
   PlayIcon,
   SettingsIcon,
   ShieldIcon,
@@ -42,17 +47,20 @@ type BotEditorProps = {
   initialSubscription: SubscriptionDto | null;
 };
 
-type Tab = "setup" | "profile" | "presence" | "access" | "billing";
+type Tab = "setup" | "music" | "profile" | "presence" | "access" | "activity" | "billing";
 
-const tabs: Array<{ id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: "setup", label: "Setup", icon: SettingsIcon },
-  { id: "profile", label: "Profile", icon: ImageIcon },
-  { id: "presence", label: "Presence", icon: SparklesIcon },
-  { id: "access", label: "Access", icon: UsersIcon },
-  { id: "billing", label: "Subscription", icon: CreditCardIcon }
+const tabs: Array<{ id: Tab; labelKey: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "setup", labelKey: "setup", icon: SettingsIcon },
+  { id: "music", labelKey: "music", icon: MusicIcon },
+  { id: "profile", labelKey: "profile", icon: ImageIcon },
+  { id: "presence", labelKey: "presence", icon: SparklesIcon },
+  { id: "access", labelKey: "access", icon: UsersIcon },
+  { id: "activity", labelKey: "activity", icon: ClockIcon },
+  { id: "billing", labelKey: "subscription", icon: CreditCardIcon }
 ];
 
 export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
+  const { tr } = useLocale();
   const [bot, setBot] = useState(initialBot);
   const [subscription] = useState(initialSubscription);
   const [channels, setChannels] = useState<ChannelDto[]>([]);
@@ -62,10 +70,12 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const [pendingGuildId, setPendingGuildId] = useState<string | null>(null);
   const [movingGuild, setMovingGuild] = useState(false);
   const [access, setAccess] = useState<AccessDto[]>([]);
+  const [audit, setAudit] = useState<AuditEntryDto[]>([]);
   const [invite, setInvite] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
   const [busyAction, setBusyAction] = useState<"start" | "stop" | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<Tab>("setup");
@@ -106,6 +116,9 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
     void fetchInvite(bot.id)
       .then((res) => setInvite(res.invite))
       .catch(() => setInvite(null));
+    void fetchAudit(bot.id)
+      .then((res) => setAudit(res.audit))
+      .catch(() => setAudit([]));
     void fetchGuilds(bot.id)
       .then((res) => {
         setGuilds(res.guilds);
@@ -196,6 +209,21 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
     await navigator.clipboard.writeText(invite);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleAssetUpload(kind: "avatar" | "banner", file: File | null) {
+    if (!file) return;
+    setUploadingKind(kind);
+    setError(null);
+    try {
+      const result = await uploadBotAsset(bot.id, file, kind);
+      setForm((prev) => ({ ...prev, [kind]: result.url }));
+      setMessage(`${kind === "avatar" ? "Avatar" : "Banner"} uploaded.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingKind(null);
+    }
   }
 
   async function handleMoveGuild() {
@@ -389,7 +417,7 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
             }`}
           >
             <t.icon className="h-4 w-4" />
-            {t.label}
+            {tr(t.labelKey)}
             {tab === t.id ? (
               <motion.span
                 layoutId="editor-tab-underline"
@@ -569,6 +597,13 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
         </div>
       ) : null}
 
+      {/* Tab: Music */}
+      {tab === "music" ? (
+        <div className="mt-6">
+          <NowPlaying botId={bot.id} />
+        </div>
+      ) : null}
+
       {/* Tab: Profile */}
       {tab === "profile" ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -589,6 +624,15 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
                 placeholder="https://..."
                 onChange={(e) => setForm((prev) => ({ ...prev, avatar: e.target.value }))}
               />
+              <label className="btn-secondary mt-2 w-full cursor-pointer">
+                {uploadingKind === "avatar" ? "Uploading avatar..." : "Upload avatar image"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(event) => void handleAssetUpload("avatar", event.target.files?.[0] ?? null)}
+                />
+              </label>
             </Field>
             <Field label="Banner URL" hint="Optional. Shown on the bot's Discord profile.">
               <input
@@ -597,6 +641,15 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
                 placeholder="https://..."
                 onChange={(e) => setForm((prev) => ({ ...prev, banner: e.target.value }))}
               />
+              <label className="btn-secondary mt-2 w-full cursor-pointer">
+                {uploadingKind === "banner" ? "Uploading banner..." : "Upload banner image"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(event) => void handleAssetUpload("banner", event.target.files?.[0] ?? null)}
+                />
+              </label>
             </Field>
             <p className="text-xs text-slate-500">
               Note: Discord rate-limits name and avatar changes to a couple per hour.
@@ -739,16 +792,21 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
                     className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5">
-                        {row.role === "owner" ? (
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/5">
+                        {row.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.avatar_url} alt="" className="h-full w-full object-cover" />
+                        ) : row.role === "owner" ? (
                           <ShieldIcon className="h-4 w-4 text-emerald-400" />
                         ) : (
                           <UsersIcon className="h-4 w-4 text-slate-400" />
                         )}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate font-mono text-sm text-white">{row.user_id}</p>
-                        <p className="text-xs capitalize text-slate-500">{row.role}</p>
+                        <p className="truncate text-sm text-white">{row.username ?? row.user_id}</p>
+                        <p className="text-xs capitalize text-slate-500">
+                          {row.role} • {row.user_id}
+                        </p>
                       </div>
                     </div>
                     {row.role !== "owner" ? (
@@ -796,6 +854,28 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
             >
               Grant access
             </button>
+          </Panel>
+        </div>
+      ) : null}
+
+      {/* Tab: Activity */}
+      {tab === "activity" ? (
+        <div className="mt-6">
+          <Panel title="Audit log" description="Recent changes for this bot.">
+            <div className="scroll-thin max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+              {audit.length ? (
+                audit.map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3">
+                    <p className="text-sm text-white">{entry.action.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      by {entry.actor_id} • {new Date(entry.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-400">No activity yet.</p>
+              )}
+            </div>
           </Panel>
         </div>
       ) : null}

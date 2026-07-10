@@ -10,6 +10,7 @@ import { useLiveData } from "@/hooks/use-live-data";
 type BotsContextValue = {
   bots: BotDto[];
   loading: boolean;
+  error: string | null;
   refreshBots: () => Promise<void>;
   selectionMode: boolean;
   setSelectionMode: (enabled: boolean) => void;
@@ -19,6 +20,8 @@ type BotsContextValue = {
   selectAll: () => void;
   clearSelection: () => void;
   isSelected: (botId: string) => boolean;
+  bulkPanelOpen: boolean;
+  setBulkPanelOpen: (open: boolean) => void;
 };
 
 const BotsContext = createContext<BotsContextValue | null>(null);
@@ -27,8 +30,10 @@ export function BotsProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [bots, setBots] = useState<BotDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectionMode, setSelectionModeState] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPanelOpen, setBulkPanelOpen] = useState(false);
 
   const loadBots = useCallback(
     async (silent = false) => {
@@ -42,10 +47,12 @@ export function BotsProvider({ children }: { children: React.ReactNode }) {
       try {
         const result = await fetchBots();
         setBots(result.bots);
-      } catch {
+        setError(null);
+      } catch (err) {
         if (!silent) {
           setBots([]);
         }
+        setError(err instanceof Error ? err.message : "Failed to load bots");
       } finally {
         if (!silent) {
           setLoading(false);
@@ -101,6 +108,7 @@ export function BotsProvider({ children }: { children: React.ReactNode }) {
     () => ({
       bots,
       loading,
+      error,
       refreshBots: () => loadBots(true),
       selectionMode,
       setSelectionMode,
@@ -109,11 +117,14 @@ export function BotsProvider({ children }: { children: React.ReactNode }) {
       toggleSelected,
       selectAll,
       clearSelection,
-      isSelected
+      isSelected,
+      bulkPanelOpen,
+      setBulkPanelOpen
     }),
     [
       bots,
       loading,
+      error,
       loadBots,
       selectionMode,
       setSelectionMode,
@@ -122,7 +133,8 @@ export function BotsProvider({ children }: { children: React.ReactNode }) {
       toggleSelected,
       selectAll,
       clearSelection,
-      isSelected
+      isSelected,
+      bulkPanelOpen
     ]
   );
 

@@ -35,8 +35,10 @@ function buildSequentialNames(
 }
 
 export function BulkBotPanel() {
-  const { selectedBots, selectedIds, selectionMode, setSelectionMode, refreshBots } = useBots();
-  const [open, setOpen] = useState(false);
+  const { selectedBots, selectedIds, selectionMode, setSelectionMode, refreshBots, bulkPanelOpen, setBulkPanelOpen } =
+    useBots();
+  const open = bulkPanelOpen;
+  const setOpen = setBulkPanelOpen;
   const [tab, setTab] = useState<BulkTab>("profile");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -62,7 +64,6 @@ export function BulkBotPanel() {
   const [accessRole, setAccessRole] = useState<"admin" | "viewer">("admin");
 
   const count = selectedIds.size;
-  const showTrigger = selectionMode && count > 0;
 
   const namePreview = useMemo(() => {
     if (!useNumberedNames) return [];
@@ -154,24 +155,8 @@ export function BulkBotPanel() {
   }
 
   return (
-    <>
-      <AnimatePresence>
-        {showTrigger && !open ? (
-          <motion.button
-            type="button"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 24 }}
-            onClick={() => setOpen(true)}
-            className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 cursor-pointer rounded-2xl border border-emerald-500/40 bg-emerald-500/20 px-5 py-3 text-sm font-semibold text-emerald-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-colors hover:bg-emerald-500/30"
-          >
-            Configure {count} bot{count === 1 ? "" : "s"}
-          </motion.button>
-        ) : null}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {open && count > 0 ? (
+    <AnimatePresence>
+      {open && count > 0 ? (
           <>
             <motion.div
               className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
@@ -424,8 +409,7 @@ export function BulkBotPanel() {
             </motion.div>
           </>
         ) : null}
-      </AnimatePresence>
-    </>
+    </AnimatePresence>
   );
 }
 

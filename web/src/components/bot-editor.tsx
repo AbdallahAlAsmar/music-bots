@@ -17,6 +17,7 @@ import {
   updateGuild
 } from "@/lib/api";
 import type { AccessDto, AuditEntryDto, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "@/lib/types";
+import { BotAvatar } from "@/components/bot-avatar";
 import { effectiveBotStatus, runtimeTone, StatusBadge } from "@/components/status-badge";
 import { NowPlaying } from "@/components/now-playing";
 import { Select } from "@/components/select";
@@ -329,12 +330,7 @@ export function BotEditor({
         <div className="flex flex-wrap items-end justify-between gap-4 px-6 pb-5">
           <div className="flex items-end gap-4">
             <div className="-mt-8 flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-slate-900 bg-slate-800">
-              {bot.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={bot.avatar} alt={`${bot.display_name} avatar`} className="h-full w-full object-cover" />
-              ) : (
-                <BotIcon className="h-8 w-8 text-emerald-400" />
-              )}
+              <BotAvatar bot={bot} size="lg" className="h-full w-full rounded-2xl" alt={`${bot.display_name} avatar`} />
             </div>
             <div className="pb-1">
               <h2 className="text-2xl font-bold tracking-tight text-white">{bot.display_name}</h2>
@@ -729,7 +725,7 @@ export function BotEditor({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={form.avatar} alt="Avatar preview" className="h-full w-full object-cover" />
                   ) : (
-                    <BotIcon className="h-6 w-6 text-emerald-400" />
+                    <BotAvatar bot={{ ...bot, avatar: null }} size="md" className="h-full w-full rounded-2xl" />
                   )}
                 </div>
                 <p className="mt-2 font-semibold text-white">{form.name.trim() || "Unnamed Bot"}</p>
@@ -803,7 +799,7 @@ export function BotEditor({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={form.avatar} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <BotIcon className="h-5 w-5 text-emerald-400" />
+                    <BotAvatar bot={{ ...bot, avatar: null }} size="sm" className="h-full w-full rounded-full" />
                   )}
                 </div>
                 <span

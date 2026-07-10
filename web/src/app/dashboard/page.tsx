@@ -1,59 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { fetchBots } from "@/lib/api";
-import { getStoredToken } from "@/lib/auth";
-import type { BotDto } from "@/lib/types";
+import { useMemo, useState } from "react";
+import { useBots } from "@/components/bots-context";
 import { BotCard } from "@/components/bot-card";
+import { BulkSelectionBar } from "@/components/bulk-selection-bar";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { effectiveBotStatus } from "@/components/status-badge";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion-primitives";
 import { ActivityIcon, AlertIcon, BotIcon, SearchIcon, ZapIcon } from "@/components/icons";
-import { useLiveData } from "@/hooks/use-live-data";
 
 type Filter = "all" | "active" | "needs-setup";
 const CONTACT_URL = process.env.NEXT_PUBLIC_CONTACT_URL || "https://discord.gg/pxvault";
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [bots, setBots] = useState<BotDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { bots, loading, error } = useBots();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-
-  const loadBots = useCallback(
-    async (silent = false) => {
-      if (!getStoredToken()) {
-        router.replace("/");
-        return;
-      }
-      if (!silent) {
-        setLoading(true);
-      }
-      try {
-        const result = await fetchBots();
-        setBots(result.bots);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load bots");
-      } finally {
-        if (!silent) {
-          setLoading(false);
-        }
-      }
-    },
-    [router]
-  );
-
-  useEffect(() => {
-    void loadBots();
-  }, [loadBots]);
-
-  useLiveData(async () => {
-    await loadBots(true);
-  }, 10_000);
 
   const stats = useMemo(() => {
     const active = bots.filter((bot) => effectiveBotStatus(bot).healthy).length;
@@ -73,15 +35,14 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell title="My bots">
-      {/* Page heading */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white">My Bots</h2>
           <p className="mt-1 text-sm text-slate-400">Everything you own or help manage, in one place.</p>
         </div>
+        {!loading && bots.length > 0 ? <BulkSelectionBar /> : null}
       </div>
 
-      {/* Stats */}
       {!loading && !error && bots.length > 0 ? (
         <Stagger inView={false} gap={0.1} className="mt-6 grid gap-4 sm:grid-cols-3">
           <StaggerItem>
@@ -96,7 +57,6 @@ export default function DashboardPage() {
         </Stagger>
       ) : null}
 
-      {/* Search + filters */}
       {!loading && bots.length > 0 ? (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -136,7 +96,6 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Loading skeleton */}
       {loading ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2" aria-busy="true" aria-label="Loading bots">
           {[0, 1, 2, 3].map((i) => (
@@ -154,7 +113,6 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Error */}
       {error ? (
         <div className="card mt-6 flex items-start gap-3 border-rose-500/30 bg-rose-500/5 p-5">
           <AlertIcon className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
@@ -165,7 +123,6 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Empty state — no bots at all */}
       {!loading && !error && bots.length === 0 ? (
         <div className="card mt-6 border-dashed px-6 py-16 text-center">
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
@@ -186,7 +143,6 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Empty state — filter/search returned nothing */}
       {!loading && !error && bots.length > 0 && visibleBots.length === 0 ? (
         <div className="card mt-6 border-dashed px-6 py-12 text-center">
           <ActivityIcon className="mx-auto h-8 w-8 text-slate-600" />
@@ -205,7 +161,6 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Bot grid */}
       {!loading && visibleBots.length > 0 ? (
         <Stagger inView={false} gap={0.07} delay={0.15} className="mt-6 grid gap-4 md:grid-cols-2">
           {visibleBots.map((bot) => (

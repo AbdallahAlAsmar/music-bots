@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useBots } from "@/components/bots-context";
 import { BotCard } from "@/components/bot-card";
-import { BulkSelectionBar } from "@/components/bulk-selection-bar";
+import { BulkSelectTrigger } from "@/components/bulk-selection-bar";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { effectiveBotStatus } from "@/components/status-badge";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion-primitives";
@@ -40,7 +40,7 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold tracking-tight text-white">My Bots</h2>
           <p className="mt-1 text-sm text-slate-400">Everything you own or help manage, in one place.</p>
         </div>
-        {!loading && bots.length > 0 ? <BulkSelectionBar /> : null}
+        {!loading && bots.length > 0 ? <BulkSelectTrigger /> : null}
       </div>
 
       {!loading && !error && bots.length > 0 ? (

@@ -973,7 +973,7 @@ export function BotEditor({
       <AnimatePresence>
         {dirty ? (
           <motion.div
-            className="fixed inset-x-4 bottom-4 z-50"
+            className="fixed inset-x-4 bottom-4 z-40"
             initial={{ opacity: 0, y: 72 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 72 }}

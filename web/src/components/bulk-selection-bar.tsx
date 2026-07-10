@@ -2,86 +2,93 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useBots } from "@/components/bots-context";
-import { CheckIcon, SettingsIcon, UsersIcon, XIcon } from "@/components/icons";
+import { CheckIcon, UsersIcon } from "@/components/icons";
 
-type BulkSelectionBarProps = {
+type BulkSelectTriggerProps = {
   className?: string;
   compact?: boolean;
 };
 
-export function BulkSelectionBar({ className = "", compact = false }: BulkSelectionBarProps) {
-  const {
-    bots,
-    selectionMode,
-    setSelectionMode,
-    selectedIds,
-    selectAll,
-    clearSelection,
-    setBulkPanelOpen
-  } = useBots();
+/** Entry point — only visible when not already selecting. */
+export function BulkSelectTrigger({ className = "", compact = false }: BulkSelectTriggerProps) {
+  const { bots, selectionMode, setSelectionMode } = useBots();
 
-  if (bots.length === 0) {
+  if (bots.length === 0 || selectionMode) {
     return null;
   }
 
+  return (
+    <button
+      type="button"
+      onClick={() => setSelectionMode(true)}
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-sm font-medium text-slate-300 transition-colors duration-200 hover:bg-white/10 hover:text-white ${className}`}
+    >
+      <UsersIcon className="h-4 w-4" />
+      {compact ? "Select" : "Select bots"}
+    </button>
+  );
+}
+
+/** Floating action dock — same pattern as the editor save bar. */
+export function BulkSelectionDock() {
+  const { bots, selectionMode, setSelectionMode, selectedIds, selectAll, clearSelection, setBulkPanelOpen } = useBots();
+
   const count = selectedIds.size;
+  const total = bots.length;
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <button
-        type="button"
-        onClick={() => setSelectionMode(!selectionMode)}
-        className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors duration-200 ${
-          selectionMode
-            ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30"
-            : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        <UsersIcon className="h-4 w-4" />
-        {selectionMode ? "Done selecting" : compact ? "Select" : "Select bots"}
-      </button>
-
-      <AnimatePresence>
-        {selectionMode ? (
-          <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <button
-              type="button"
-              onClick={selectAll}
-              className="rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
-            >
-              Select all
-            </button>
-            {count > 0 ? (
+    <AnimatePresence>
+      {selectionMode && bots.length > 0 ? (
+        <motion.div
+          className="fixed inset-x-4 bottom-4 z-50"
+          initial={{ opacity: 0, y: 72 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 72 }}
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          role="region"
+          aria-label="Bulk bot selection"
+        >
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/95 px-5 py-3.5 shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white">
+                {count > 0 ? `${count} bot${count === 1 ? "" : "s"} selected` : "Select bots to configure"}
+              </p>
+              <p className="text-xs text-slate-500">
+                {count > 0 ? `of ${total} total` : "Tap cards or avatars in the rail"}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={clearSelection}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="btn-secondary px-3 py-2 text-sm"
+                onClick={selectAll}
+                disabled={count === total}
               >
-                <XIcon className="h-3.5 w-3.5" />
-                Clear ({count})
+                Select all
               </button>
-            ) : null}
-            {count > 0 ? (
               <button
                 type="button"
+                className="btn-secondary px-4 py-2"
+                onClick={() => {
+                  clearSelection();
+                  setSelectionMode(false);
+                }}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="btn-primary px-4 py-2"
+                disabled={count === 0}
                 onClick={() => setBulkPanelOpen(true)}
-                className="btn-primary px-4 py-2 text-sm"
               >
-                <SettingsIcon className="h-4 w-4" />
-                Configure {count} bot{count === 1 ? "" : "s"}
+                {count > 0 ? `Configure ${count} bot${count === 1 ? "" : "s"}` : "Configure"}
               </button>
-            ) : (
-              <span className="text-xs text-slate-500">Tap bots to select them</span>
-            )}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 

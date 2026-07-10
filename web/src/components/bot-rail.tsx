@@ -7,7 +7,7 @@ import { motion } from "motion/react";
 import type { BotDto } from "@/lib/types";
 import { useBots } from "@/components/bots-context";
 import { BotAvatar } from "@/components/bot-avatar";
-import { BulkSelectionBar, BulkSelectionHint } from "@/components/bulk-selection-bar";
+import { BulkSelectTrigger, BulkSelectionHint } from "@/components/bulk-selection-bar";
 import { effectiveBotStatus } from "@/components/status-badge";
 import { LayoutGridIcon } from "@/components/icons";
 
@@ -56,7 +56,7 @@ export function BotRail({ activeBotId }: { activeBotId: string }) {
               <LayoutGridIcon className="h-4 w-4" />
             </Link>
           </div>
-          <BulkSelectionBar compact className="px-0.5" />
+          <BulkSelectTrigger compact className="w-full justify-center lg:w-auto" />
         </div>
 
         <nav className="scroll-thin flex gap-3 overflow-x-auto pb-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-visible lg:pb-0 lg:pr-0.5">

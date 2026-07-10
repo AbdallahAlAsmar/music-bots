@@ -1,0 +1,15 @@
+PXVault — Discord Music Bot Dashboard
+
+Your music bots, finally easy to manage.
+Stop fighting slash commands and modals. Sign in with Discord, see every bot you own, and set them up in minutes.
+
+Core highlights:
+- No slash commands needed
+- Voice channel picker
+- Start/stop in one click
+- Team access controls
+- Live health monitoring
+- Secure by design
+
+Message for this 10s intro:
+PXVault music bots — fast setup and control in one dashboard.

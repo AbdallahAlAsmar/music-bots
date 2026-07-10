@@ -215,6 +215,115 @@ export class BotManager {
     await this.writeAudit(botId, requesterId, "update_profile", patch as Record<string, unknown>);
   }
 
+  async bulkUpdateBotsForUser(
+    requesterId: string,
+    botIds: string[],
+    patch: Partial<
+      Pick<
+        BotEntity,
+        | "voice_channel_id"
+        | "name"
+        | "avatar"
+        | "banner"
+        | "language"
+        | "log_channel_id"
+        | "status_text"
+        | "status_type"
+        | "online_status"
+      >
+    >,
+    names?: Record<string, string>
+  ): Promise<{ updated: BotEntity[]; failed: Array<{ bot_id: string; error: string }> }> {
+    const uniqueIds = [...new Set(botIds.map((id) => id.trim()).filter(Boolean))];
+    if (!uniqueIds.length) {
+      throw new Error("No bots selected");
+    }
+
+    const updated: BotEntity[] = [];
+    const failed: Array<{ bot_id: string; error: string }> = [];
+
+    for (const botId of uniqueIds) {
+      try {
+        const botPatch: typeof patch = { ...patch };
+        const customName = names?.[botId]?.trim();
+        if (customName) {
+          botPatch.name = customName;
+        }
+        if (!Object.keys(botPatch).length) {
+          continue;
+        }
+        await this.permissionService.assertRole(botId, requesterId, "admin");
+        await this.botRepo.update(botId, botPatch);
+        await this.refreshRuntime(botId);
+        await this.writeAudit(botId, requesterId, "bulk_update_profile", botPatch as Record<string, unknown>);
+        const bot = await this.botRepo.findById(botId);
+        if (bot) {
+          updated.push(bot);
+        }
+      } catch (error) {
+        failed.push({
+          bot_id: botId,
+          error: error instanceof Error ? error.message : "Update failed"
+        });
+      }
+    }
+
+    return { updated, failed };
+  }
+
+  async bulkGrantAccessForUser(
+    requesterId: string,
+    botIds: string[],
+    targetUserId: string,
+    role: "admin" | "viewer"
+  ): Promise<{ granted: string[]; failed: Array<{ bot_id: string; error: string }> }> {
+    const uniqueIds = [...new Set(botIds.map((id) => id.trim()).filter(Boolean))];
+    const granted: string[] = [];
+    const failed: Array<{ bot_id: string; error: string }> = [];
+
+    for (const botId of uniqueIds) {
+      try {
+        await this.grantAccess(requesterId, botId, targetUserId, role);
+        granted.push(botId);
+      } catch (error) {
+        failed.push({
+          bot_id: botId,
+          error: error instanceof Error ? error.message : "Grant failed"
+        });
+      }
+    }
+
+    return { granted, failed };
+  }
+
+  async bulkControlBotsForUser(
+    requesterId: string,
+    botIds: string[],
+    action: "start" | "stop"
+  ): Promise<{ ok: string[]; failed: Array<{ bot_id: string; error: string }> }> {
+    const uniqueIds = [...new Set(botIds.map((id) => id.trim()).filter(Boolean))];
+    const ok: string[] = [];
+    const failed: Array<{ bot_id: string; error: string }> = [];
+
+    for (const botId of uniqueIds) {
+      try {
+        if (action === "start") {
+          await this.resumeBotForUser(requesterId, botId);
+        } else {
+          await this.pauseBotForUser(requesterId, botId);
+        }
+        ok.push(botId);
+      } catch (error) {
+        failed.push({
+          bot_id: botId,
+          error: error instanceof Error ? error.message : "Action failed"
+        });
+      }
+    }
+
+    return { ok, failed };
+  }
+
   async getUserBots(userId: string): Promise<BotEntity[]> {
     return this.getAccessibleBots(userId);
   }

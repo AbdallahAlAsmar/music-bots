@@ -1,0 +1,67 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: local("Arial");
+    }
+    #root {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      position: relative;
+      font-family: "Plus Jakarta Sans", Arial, sans-serif;
+      color: #f8fafc;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 25%, rgba(34, 197, 94, 0.22), rgba(2, 6, 23, 0.1) 42%, rgba(2, 6, 23, 0.7));
+    }
+    .title-wrap {
+      position: absolute;
+      top: 360px;
+      width: 100%;
+      text-align: center;
+      padding: 0 80px;
+    }
+    .title {
+      font-size: 124px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      color: #f8fafc;
+      text-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    .subtitle {
+      margin-top: 18px;
+      font-size: 44px;
+      color: #cbd5e1;
+      opacity: 0;
+      transform: translateY(18px);
+    }
+  </style>
+
+  <div id="root" data-composition-id="01-hook-title" data-width="1080" data-height="1920">
+    <div class="clip" data-start="0" data-duration="3" data-track-index="0">
+      <div class="overlay"></div>
+    </div>
+    <div class="clip title-wrap" data-start="0" data-duration="3" data-track-index="1">
+      <div id="title" class="title">PXVault</div>
+      <div id="subtitle" class="subtitle">Music bots, finally easy to manage</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    tl.to("#title", { opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 0.25);
+    tl.to("#subtitle", { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.2);
+    window.__timelines["01-hook-title"] = tl;
+  </script>
+</template>

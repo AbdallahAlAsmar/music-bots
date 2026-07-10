@@ -9,7 +9,10 @@ web/node_modules/
 web/.env
 web/.env.*
 !web/.env.example
-
+.agents/
+.cursor/
+.cursor
+.PX-Licence/
 # Build output
 dist/
 web/.next/

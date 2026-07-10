@@ -54,6 +54,90 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     return c.json({ bots: bots.map(toBotDto) });
   });
 
+  app.post("/bulk", async (c) => {
+    const user = c.get("user");
+    const body = await c.req.json<{
+      bot_ids?: string[];
+      patch?: {
+        name?: string | null;
+        avatar?: string | null;
+        banner?: string | null;
+        language?: "ar" | "en";
+        log_channel_id?: string | null;
+        voice_channel_id?: string | null;
+        status_text?: string | null;
+        status_type?: ActivityKind | null;
+        online_status?: "online" | "idle" | "dnd" | "invisible" | null;
+      };
+      names?: Record<string, string>;
+      grant_access?: { user_id: string; role: "admin" | "viewer" };
+      action?: "start" | "stop";
+    }>();
+
+    const botIds = body.bot_ids ?? [];
+    if (!botIds.length) {
+      return c.json({ error: "bot_ids is required" }, 400);
+    }
+
+    try {
+      const result: {
+        updated: ReturnType<typeof toBotDto>[];
+        failed: Array<{ bot_id: string; error: string }>;
+        granted?: string[];
+        grant_failed?: Array<{ bot_id: string; error: string }>;
+        controlled?: string[];
+        control_failed?: Array<{ bot_id: string; error: string }>;
+      } = { updated: [], failed: [] };
+
+      if (body.patch && Object.keys(body.patch).length > 0) {
+        const bulk = await manager.bulkUpdateBotsForUser(user.id, botIds, body.patch, body.names);
+        result.updated = bulk.updated.map(toBotDto);
+        result.failed = bulk.failed;
+      } else if (body.names && Object.keys(body.names).length > 0) {
+        const bulk = await manager.bulkUpdateBotsForUser(user.id, botIds, {}, body.names);
+        result.updated = bulk.updated.map(toBotDto);
+        result.failed = bulk.failed;
+      }
+
+      if (body.grant_access?.user_id?.trim()) {
+        const role = body.grant_access.role;
+        if (role !== "admin" && role !== "viewer") {
+          return c.json({ error: "grant_access.role must be admin or viewer" }, 400);
+        }
+        const targetUserId = body.grant_access.user_id.trim();
+        const validUser = await discordUserService.validateUserExists(targetUserId);
+        if (!validUser) {
+          return c.json({ error: "Discord user not found. Please check the ID." }, 400);
+        }
+        const grant = await manager.bulkGrantAccessForUser(user.id, botIds, targetUserId, role);
+        result.granted = grant.granted;
+        result.grant_failed = grant.failed;
+      }
+
+      if (body.action === "start" || body.action === "stop") {
+        const control = await manager.bulkControlBotsForUser(user.id, botIds, body.action);
+        result.controlled = control.ok;
+        result.control_failed = control.failed;
+      }
+
+      if (
+        !result.updated.length &&
+        !result.granted?.length &&
+        !result.controlled?.length &&
+        result.failed.length === 0 &&
+        !result.grant_failed?.length &&
+        !result.control_failed?.length
+      ) {
+        return c.json({ error: "Nothing to apply — provide patch, names, grant_access, or action" }, 400);
+      }
+
+      return c.json(result);
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
   app.get("/:id", async (c) => {
     const user = c.get("user");
     const botId = c.req.param("id");

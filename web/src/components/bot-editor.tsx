@@ -43,8 +43,11 @@ import {
 } from "@/components/icons";
 
 type BotEditorProps = {
+  botId: string;
   initialBot: BotDto;
   initialSubscription: SubscriptionDto | null;
+  isRefreshing?: boolean;
+  onBotUpdated?: () => void;
 };
 
 type Tab = "setup" | "music" | "profile" | "presence" | "access" | "activity" | "billing";
@@ -59,7 +62,15 @@ const tabs: Array<{ id: Tab; labelKey: string; icon: React.ComponentType<{ class
   { id: "billing", labelKey: "subscription", icon: CreditCardIcon }
 ];
 
-export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
+const TAB_STORAGE_KEY = "pxvault-bot-editor-tab";
+
+export function BotEditor({
+  botId,
+  initialBot,
+  initialSubscription,
+  isRefreshing = false,
+  onBotUpdated
+}: BotEditorProps) {
   const { tr } = useLocale();
   const [bot, setBot] = useState(initialBot);
   const [subscription] = useState(initialSubscription);
@@ -78,7 +89,14 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const [uploadingKind, setUploadingKind] = useState<"avatar" | "banner" | null>(null);
   const [busyAction, setBusyAction] = useState<"start" | "stop" | null>(null);
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<Tab>("setup");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "setup";
+    const saved = window.sessionStorage.getItem(TAB_STORAGE_KEY);
+    if (saved === "setup" || saved === "music" || saved === "profile" || saved === "presence" || saved === "access" || saved === "activity" || saved === "billing") {
+      return saved;
+    }
+    return "setup";
+  });
   const [accessUserId, setAccessUserId] = useState("");
   const [accessRole, setAccessRole] = useState<"admin" | "viewer">("admin");
 
@@ -99,6 +117,38 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
 
   const [form, setForm] = useState(initialForm);
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(initialForm), [form, initialForm]);
+
+  useEffect(() => {
+    sessionStorage.setItem(TAB_STORAGE_KEY, tab);
+  }, [tab]);
+
+  useEffect(() => {
+    if (initialBot.id !== botId) {
+      return;
+    }
+    setBot(initialBot);
+    setForm({
+      name: initialBot.name ?? "",
+      avatar: initialBot.avatar ?? "",
+      banner: initialBot.banner ?? "",
+      language: initialBot.language ?? "ar",
+      voice_channel_id: initialBot.voice_channel_id ?? "",
+      log_channel_id: initialBot.log_channel_id ?? "",
+      status_type: initialBot.status_type ?? "PLAYING",
+      status_text: initialBot.status_text ?? "",
+      online_status: initialBot.online_status ?? "online"
+    });
+    setPendingGuildId(null);
+    setMessage(null);
+    setError(null);
+  }, [botId, initialBot]);
+
+  useEffect(() => {
+    if (initialBot.id !== bot.id || dirty) {
+      return;
+    }
+    setBot(initialBot);
+  }, [initialBot, dirty, bot.id]);
 
   useEffect(() => {
     void fetchChannels(bot.id)
@@ -154,6 +204,7 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
       });
       setBot(result.bot);
       setMessage("Changes saved.");
+      onBotUpdated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -266,7 +317,7 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
   const guildChanged = selectedGuildId !== bot.guild_id;
 
   return (
-    <div className="pb-28">
+    <div className={`pb-28 transition-opacity duration-200 ${isRefreshing ? "opacity-90" : "opacity-100"}`}>
       {/* Header */}
       <div className="card overflow-hidden">
         {bot.banner ? (
@@ -431,12 +482,20 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={tab}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
+          key={botId}
+          initial={{ opacity: 0.92 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0.92 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
         >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
       {/* Tab: Setup (server) */}
       {tab === "setup" ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -909,6 +968,8 @@ export function BotEditor({ initialBot, initialSubscription }: BotEditorProps) {
           ) : null}
         </div>
       ) : null}
+            </motion.div>
+          </AnimatePresence>
         </motion.div>
       </AnimatePresence>
 

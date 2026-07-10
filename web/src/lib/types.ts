@@ -84,6 +84,15 @@ export type AdminBotRow = {
   guild?: { id: string; name: string };
 };
 
+export type BulkUpdateResult = {
+  updated: BotDto[];
+  failed: Array<{ bot_id: string; error: string }>;
+  granted?: string[];
+  grant_failed?: Array<{ bot_id: string; error: string }>;
+  controlled?: string[];
+  control_failed?: Array<{ bot_id: string; error: string }>;
+};
+
 export type AuditEntryDto = {
   id: string;
   bot_id: string;

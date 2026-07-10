@@ -1,5 +1,5 @@
 import { clearSession, getStoredToken, getStoredUser, storeSession } from "./auth";
-import type { AccessDto, AdminBotRow, AuditEntryDto, AuthUser, BotDto, ChannelDto, GuildDto, PlayerStateDto, SubscriptionDto } from "./types";
+import type { AccessDto, AdminBotRow, AuditEntryDto, AuthUser, BotDto, BulkUpdateResult, ChannelDto, GuildDto, PlayerStateDto, SubscriptionDto } from "./types";
 
 // Empty string = same-origin. Requests go to /api/* on this site and Next.js
 // rewrites proxy them to the bot host (see next.config.ts), avoiding both
@@ -140,6 +140,32 @@ export async function updateBot(
   return apiFetch(`/api/bots/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
+  });
+}
+
+export async function bulkUpdateBots(input: {
+  bot_ids: string[];
+  patch?: Partial<
+    Pick<
+      BotDto,
+      | "name"
+      | "avatar"
+      | "banner"
+      | "language"
+      | "log_channel_id"
+      | "voice_channel_id"
+      | "status_text"
+      | "status_type"
+      | "online_status"
+    >
+  >;
+  names?: Record<string, string>;
+  grant_access?: { user_id: string; role: "admin" | "viewer" };
+  action?: "start" | "stop";
+}): Promise<BulkUpdateResult> {
+  return apiFetch("/api/bots/bulk", {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 

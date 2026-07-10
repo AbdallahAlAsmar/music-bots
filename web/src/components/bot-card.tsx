@@ -19,6 +19,8 @@ export function BotCard({ bot }: BotCardProps) {
     <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 22 }} className="h-full">
       <Link
         href={`/dashboard/bots/${bot.id}`}
+        scroll={false}
+        prefetch
         className="card group block h-full cursor-pointer p-5 transition-colors duration-200 hover:border-emerald-500/40"
       >
         <div className="flex items-start justify-between gap-4">

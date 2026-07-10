@@ -1,0 +1,24 @@
+{
+  "provider": "auto",
+  "speed": 1,
+  "lines": [
+    {
+      "id": "01",
+      "text": "Meet PXVault."
+    },
+    {
+      "id": "02",
+      "text": "Set up and control your music bots from one dashboard."
+    },
+    {
+      "id": "03",
+      "text": "PXVault. Sign in and launch faster."
+    }
+  ],
+  "bgm": {
+    "mode": "retrieve",
+    "query": "PXVault music bots — fast setup and control in one dashboard.",
+    "blob": "PXVault music bots — fast setup and control in one dashboard.",
+    "arc": "Hook → Product reveal → CTA"
+  }
+}

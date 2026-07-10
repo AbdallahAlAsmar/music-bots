@@ -1,0 +1,102 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: local("Arial");
+    }
+    #root {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      position: relative;
+      font-family: "Plus Jakarta Sans", Arial, sans-serif;
+      color: #f8fafc;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.45), rgba(2, 6, 23, 0.72));
+    }
+    .grid {
+      position: absolute;
+      top: 260px;
+      left: 70px;
+      right: 70px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+    }
+    .card {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 24px;
+      background: rgba(15, 23, 42, 0.66);
+      padding: 28px 26px;
+      backdrop-filter: blur(4px);
+      transform: translateY(24px);
+      opacity: 0;
+    }
+    .card h3 {
+      font-size: 34px;
+      margin-bottom: 8px;
+    }
+    .card p {
+      font-size: 24px;
+      color: #cbd5e1;
+    }
+    .chip-row {
+      position: absolute;
+      top: 1180px;
+      left: 70px;
+      right: 70px;
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      border-radius: 999px;
+      border: 1px solid rgba(34, 197, 94, 0.45);
+      background: rgba(34, 197, 94, 0.14);
+      color: #dcfce7;
+      padding: 14px 22px;
+      font-size: 24px;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  </style>
+  <div id="root" data-composition-id="02-value-collage" data-width="1080" data-height="1920">
+    <div class="clip" data-start="0" data-duration="4" data-track-index="0">
+      <div class="overlay"></div>
+    </div>
+    <div class="clip grid" data-start="0" data-duration="4" data-track-index="1">
+      <div id="card1" class="card">
+        <h3>Setup in minutes</h3>
+        <p>No slash-command maze</p>
+      </div>
+      <div id="card2" class="card">
+        <h3>One dashboard</h3>
+        <p>Control all your bots</p>
+      </div>
+    </div>
+    <div class="clip chip-row" data-start="0" data-duration="4" data-track-index="2">
+      <div id="chip1" class="chip">Team access</div>
+      <div id="chip2" class="chip">Live health</div>
+      <div id="chip3" class="chip">Secure tokens</div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    tl.to("#card1", { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 0.3);
+    tl.to("#card2", { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 0.85);
+    tl.to("#chip1", { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 1.7);
+    tl.to("#chip2", { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 2.2);
+    tl.to("#chip3", { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 2.65);
+    window.__timelines["02-value-collage"] = tl;
+  </script>
+</template>

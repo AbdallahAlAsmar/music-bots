@@ -273,3 +273,12 @@ export function VolumeIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function XIcon({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}

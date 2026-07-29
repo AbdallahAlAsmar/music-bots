@@ -67,11 +67,15 @@ export function isTokenExpiringSoon(token: string, withinMs: number): boolean {
   return expiry - Date.now() <= withinMs;
 }
 
-export function getDiscordAuthUrl(): string {
+export function getDiscordAuthUrl(returnTo?: string): string {
   const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
   const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI;
   if (!clientId || !redirectUri) {
     throw new Error("Discord OAuth is not configured");
+  }
+
+  if (returnTo) {
+    STORAGE()?.setItem("bot_control_return_to", returnTo);
   }
 
   const state = crypto.getRandomValues(new Uint32Array(4)).join("-");
@@ -85,6 +89,12 @@ export function getDiscordAuthUrl(): string {
   });
 
   return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+}
+
+export function consumeReturnTo(): string | null {
+  const value = STORAGE()?.getItem("bot_control_return_to") ?? null;
+  STORAGE()?.removeItem("bot_control_return_to");
+  return value && value.startsWith("/") ? value : null;
 }
 
 export function validateAndConsumeOAuthState(state: string | null): boolean {

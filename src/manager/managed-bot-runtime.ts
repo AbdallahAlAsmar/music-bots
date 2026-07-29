@@ -1,6 +1,8 @@
 import {
   ActionRowBuilder,
   ActivityType,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
   Options,
   DiscordAPIError,
@@ -105,6 +107,16 @@ interface ManagedRuntimeActions {
   getPrimaryOwnedBot(ownerId: string): Promise<BotEntity | null>;
   updateHealth(botId: string, patch: Partial<Pick<BotEntity, "runtime_state" | "last_error" | "last_ready_at" | "last_command_at" | "health_updated_at">>): Promise<void>;
   restart(requesterId: string, botId: string): Promise<void>;
+  enableRoomLink(requesterId: string, botId: string): Promise<{ url: string; token: string }>;
+  getRoomLinkUrl(botId: string): Promise<string | null>;
+  recordRoomAction(input: {
+    botId: string;
+    actorId: string;
+    actorTag: string;
+    action: string;
+    details?: Record<string, unknown> | null;
+    source: "discord" | "dashboard" | "room";
+  }): Promise<void>;
 }
 
 type MentionCommand = "setup" | "come" | "leave" | "manage";
@@ -200,6 +212,7 @@ export class ManagedBotRuntime {
     loop: LoopMode;
     isPaused: boolean;
     isConnected: boolean;
+    positionMs: number;
   } {
     const player = this.player;
     return {
@@ -208,12 +221,53 @@ export class ManagedBotRuntime {
       volume: player.getVolume(),
       loop: player.getLoop(),
       isPaused: player.isPaused(),
-      isConnected: player.hasActiveVoiceSession()
+      isConnected: player.hasActiveVoiceSession(),
+      positionMs: player.getPositionMs()
     };
   }
 
+  async isUserInAssignedVoice(userId: string): Promise<{ inVoice: boolean; channelName: string | null }> {
+    const assigned = this.botData.voice_channel_id;
+    if (!assigned) {
+      return { inVoice: false, channelName: null };
+    }
+    const guild =
+      this.client.guilds.cache.get(this.botData.guild_id) ??
+      (await this.client.guilds.fetch(this.botData.guild_id).catch(() => null));
+    if (!guild) {
+      return { inVoice: false, channelName: null };
+    }
+    const channel =
+      guild.channels.cache.get(assigned) ?? (await guild.channels.fetch(assigned).catch(() => null));
+    const channelName = channel && "name" in channel ? channel.name : null;
+    const cached = guild.voiceStates.cache.get(userId);
+    if (cached?.channelId === assigned) {
+      return { inVoice: true, channelName };
+    }
+    const member = await guild.members.fetch(userId).catch(() => null);
+    return {
+      inVoice: member?.voice.channelId === assigned,
+      channelName
+    };
+  }
+
+  async getAssignedVoiceChannelName(): Promise<string | null> {
+    const assigned = this.botData.voice_channel_id;
+    if (!assigned) {
+      return null;
+    }
+    const guild =
+      this.client.guilds.cache.get(this.botData.guild_id) ??
+      (await this.client.guilds.fetch(this.botData.guild_id).catch(() => null));
+    if (!guild) {
+      return null;
+    }
+    const channel = guild.channels.cache.get(assigned) ?? (await guild.channels.fetch(assigned).catch(() => null));
+    return channel && "name" in channel ? channel.name : null;
+  }
+
   async controlMusic(
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume",
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
     payload?: { query?: string; volume?: number; requesterId?: string }
   ): Promise<void> {
     const player = this.player;
@@ -237,6 +291,10 @@ export class ManagedBotRuntime {
       player.stop();
       return;
     }
+    if (action === "clear") {
+      player.clear();
+      return;
+    }
     if (action === "volume") {
       const volume = payload?.volume;
       if (!Number.isFinite(volume)) {
@@ -256,6 +314,22 @@ export class ManagedBotRuntime {
       await this.joinAssignedVoice();
       await player.add(query, payload?.requesterId ? `web:${payload.requesterId}` : "web");
     }
+  }
+
+  private async logMusicAction(
+    actorId: string,
+    actorTag: string,
+    action: string,
+    details?: Record<string, unknown> | null
+  ): Promise<void> {
+    await this.runtimeActions.recordRoomAction({
+      botId: this.botData.id,
+      actorId,
+      actorTag,
+      action,
+      details: details ?? null,
+      source: "discord"
+    });
   }
 
   async start(): Promise<void> {
@@ -483,6 +557,49 @@ export class ManagedBotRuntime {
       return;
     }
 
+    if (interaction.commandName === "roomlink") {
+      await this.permissionService.assertRole(this.botData.id, interaction.user.id, "admin");
+      const { url } = await this.runtimeActions.enableRoomLink(interaction.user.id, this.botData.id);
+      const embed = new EmbedBuilder()
+        .setTitle(this.t("Web Music Room", "روم الموسيقى على الويب"))
+        .setDescription(
+          this.t(
+            [
+              "Members in the assigned voice channel can control this bot from the website.",
+              "",
+              "1. Join the assigned voice channel",
+              "2. Open the link and sign in with Discord",
+              "3. Play, skip, pause, stop, and change volume from the browser",
+              "",
+              url
+            ].join("\n"),
+            [
+              "الأعضاء داخل الروم الصوتي المعيّن يمكنهم التحكم بهذا البوت من الموقع.",
+              "",
+              "1. ادخل الروم الصوتي المعيّن",
+              "2. افتح الرابط وسجّل الدخول عبر Discord",
+              "3. شغّل، تخطَّ، أوقف، وغيّر الصوت من المتصفح",
+              "",
+              url
+            ].join("\n")
+          )
+        )
+        .setColor(0x10b981);
+      await interaction.editReply({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel(this.t("Open web controls", "افتح التحكم من الويب"))
+              .setStyle(ButtonStyle.Link)
+              .setURL(url)
+          )
+        ]
+      });
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "roomlink");
+      return;
+    }
+
     const member = interaction.member;
     const userVoice = member && typeof member !== "string" && "voice" in member ? member.voice.channel : null;
     if (!userVoice || userVoice.id !== this.botData.voice_channel_id) {
@@ -510,19 +627,14 @@ export class ManagedBotRuntime {
         return;
       }
       try {
-        console.log(`[ManagedBot ${this.botData.id}] Processing /play for user ${interaction.user.id}: "${query}"`);
-        console.log(`[ManagedBot ${this.botData.id}] /play succeeded, nowPlaying:`, result.nowPlaying?.title);
-      } catch (error) {
-        const errorMsg = (error as Error).message;
-        console.error(`[ManagedBot ${this.botData.id}] /play failed:`, errorMsg);
-        logger.warn("Managed bot play add failed", {
+        logger.info("Managed bot play succeeded", {
           botId: this.botData.id,
           userId: interaction.user.id,
           query,
-          error: errorMsg
+          title: result.nowPlaying?.title
         });
-        await interaction.editReply(this.t(`❌ ${errorMsg}`, `❌ ${errorMsg}`));
-        return;
+      } catch {
+        /* ignore logging failures */
       }
       if (!result.nowPlaying) {
         const reason = this.player.getLastError();
@@ -540,10 +652,23 @@ export class ManagedBotRuntime {
         return;
       }
       this.musicAnnouncementChannelId = interaction.channelId;
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "play", { query, title: result.nowPlaying.title });
+      const roomUrl = await this.runtimeActions.getRoomLinkUrl(this.botData.id);
+      const components = [this.controlMenuRow()];
+      if (roomUrl) {
+        components.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel(this.t("Open web controls", "افتح التحكم من الويب"))
+              .setStyle(ButtonStyle.Link)
+              .setURL(roomUrl)
+          )
+        );
+      }
       if (result.startedPlayback) {
         const announcement = await interaction.followUp({
           embeds: [this.trackEmbed(this.t("🎵 Now Playing", "🎵 يتم التشغيل الآن"), result.nowPlaying)],
-          components: [this.controlMenuRow()],
+          components,
           flags: undefined
         });
         void this.startLyricsUpdates(result.nowPlaying, announcement);
@@ -557,18 +682,26 @@ export class ManagedBotRuntime {
 
     if (interaction.commandName === "skip") {
       this.player.skip();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "skip");
+      await interaction.editReply(this.t("⏭️ Skipped.", "⏭️ تم التخطي."));
+      return;
     }
     if (interaction.commandName === "stop") {
       this.player.stop();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "stop");
       await interaction.editReply({ content: this.t("⏹️ Stopped and cleared queue.", "⏹️ تم الإيقاف ومسح القائمة."), components: [] });
       return;
     }
     if (interaction.commandName === "pause") {
-      await interaction.editReply(this.player.pause() ? this.t("⏸️ Paused.", "⏸️ تم الإيقاف المؤقت.") : this.t("Nothing is playing.", "لا يوجد شيء قيد التشغيل."));
+      const ok = this.player.pause();
+      if (ok) await this.logMusicAction(interaction.user.id, interaction.user.tag, "pause");
+      await interaction.editReply(ok ? this.t("⏸️ Paused.", "⏸️ تم الإيقاف المؤقت.") : this.t("Nothing is playing.", "لا يوجد شيء قيد التشغيل."));
       return;
     }
     if (interaction.commandName === "resume") {
-      await interaction.editReply(this.player.resume() ? this.t("▶️ Resumed.", "▶️ تم استئناف التشغيل.") : this.t("Nothing to resume.", "لا يوجد ما يمكن استئنافه."));
+      const ok = this.player.resume();
+      if (ok) await this.logMusicAction(interaction.user.id, interaction.user.tag, "resume");
+      await interaction.editReply(ok ? this.t("▶️ Resumed.", "▶️ تم استئناف التشغيل.") : this.t("Nothing to resume.", "لا يوجد ما يمكن استئنافه."));
       return;
     }
     if (interaction.commandName === "queue") {
@@ -589,28 +722,33 @@ export class ManagedBotRuntime {
     if (interaction.commandName === "remove") {
       const index = interaction.options.getInteger("index", true);
       const removed = this.player.remove(index - 1);
+      if (removed) await this.logMusicAction(interaction.user.id, interaction.user.tag, "remove", { index, title: removed.title });
       await interaction.editReply(removed ? this.t(`🗑️ Removed **${removed.title}**.`, `🗑️ تم حذف **${removed.title}**.`) : this.t("Invalid queue index.", "رقم العنصر في القائمة غير صحيح."));
       return;
     }
     if (interaction.commandName === "clear") {
       this.player.clear();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "clear");
       await interaction.editReply(this.t("🧹 Queue cleared.", "🧹 تم مسح القائمة."));
       return;
     }
     if (interaction.commandName === "shuffle") {
       this.player.shuffle();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "shuffle");
       await interaction.editReply(this.t("🔀 Queue shuffled.", "🔀 تم خلط القائمة."));
       return;
     }
     if (interaction.commandName === "loop") {
       const mode = interaction.options.getString("mode", true) as LoopMode;
       this.player.setLoop(mode);
-      await interaction.editReply(this.t(`🔁 Loop: **${mode}**`, `🔁 التكرار: **${mode}**`));
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "loop", { mode });
+      await interaction.editReply(this.t(`🔁 Loop set to **${mode}**.`, `🔁 تم ضبط التكرار على **${mode}**.`));
       return;
     }
     if (interaction.commandName === "volume") {
       const value = interaction.options.getInteger("percent", true);
       this.player.setVolume(value);
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "volume", { volume: value });
       await interaction.editReply(this.t(`🔊 Volume: ${this.player.getVolume()}%`, `🔊 مستوى الصوت: ${this.player.getVolume()}%`));
       return;
     }
@@ -672,20 +810,26 @@ export class ManagedBotRuntime {
 
   private async runControlAction(action: string, interaction: ButtonInteraction | StringSelectMenuInteraction): Promise<void> {
     if (action === "pause") {
-      await interaction.editReply(this.player.pause() ? this.t("⏸️ Paused.", "⏸️ تم الإيقاف المؤقت.") : this.t("Nothing is playing.", "لا يوجد شيء قيد التشغيل."));
+      const ok = this.player.pause();
+      if (ok) await this.logMusicAction(interaction.user.id, interaction.user.tag, "pause");
+      await interaction.editReply(ok ? this.t("⏸️ Paused.", "⏸️ تم الإيقاف المؤقت.") : this.t("Nothing is playing.", "لا يوجد شيء قيد التشغيل."));
       return;
     }
     if (action === "resume") {
-      await interaction.editReply(this.player.resume() ? this.t("▶️ Resumed.", "▶️ تم الاستئناف.") : this.t("Nothing to resume.", "لا يوجد ما يمكن استئنافه."));
+      const ok = this.player.resume();
+      if (ok) await this.logMusicAction(interaction.user.id, interaction.user.tag, "resume");
+      await interaction.editReply(ok ? this.t("▶️ Resumed.", "▶️ تم الاستئناف.") : this.t("Nothing to resume.", "لا يوجد ما يمكن استئنافه."));
       return;
     }
     if (action === "skip") {
       this.player.skip();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "skip");
       await interaction.editReply(this.t("⏭️ Skipped.", "⏭️ تم التخطي."));
       return;
     }
     if (action === "shuffle") {
       this.player.shuffle();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "shuffle");
       await interaction.editReply(this.t("🔀 Queue shuffled.", "🔀 تم خلط القائمة."));
       return;
     }
@@ -694,16 +838,19 @@ export class ManagedBotRuntime {
       const current = this.player.getLoop();
       const next = order[(order.indexOf(current) + 1) % order.length];
       this.player.setLoop(next);
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "loop", { mode: next });
       await interaction.editReply(this.t(`🔁 Loop: **${next}**`, `🔁 التكرار: **${next}**`));
       return;
     }
     if (action === "vol_down") {
       this.player.setVolume(this.player.getVolume() - 10);
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "volume", { volume: this.player.getVolume() });
       await interaction.editReply(this.t(`🔉 Volume: ${this.player.getVolume()}%`, `🔉 الصوت: ${this.player.getVolume()}%`));
       return;
     }
     if (action === "vol_up") {
       this.player.setVolume(this.player.getVolume() + 10);
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "volume", { volume: this.player.getVolume() });
       await interaction.editReply(this.t(`🔊 Volume: ${this.player.getVolume()}%`, `🔊 الصوت: ${this.player.getVolume()}%`));
       return;
     }
@@ -727,6 +874,7 @@ export class ManagedBotRuntime {
     }
     if (action === "stop") {
       this.player.stop();
+      await this.logMusicAction(interaction.user.id, interaction.user.tag, "stop");
       await interaction.editReply(this.t("⏹️ Stopped.", "⏹️ تم الإيقاف."));
     }
   }
@@ -1264,22 +1412,11 @@ export class ManagedBotRuntime {
     }
 
     this.musicAnnouncementChannelId = message.channelId;
+    await this.logMusicAction(message.author.id, message.author.tag, "play", {
+      query,
+      title: result.nowPlaying?.title
+    });
 
-    try {
-      console.log(`[ManagedBot ${this.botData.id}] Processing prefix play for user ${message.author.id}: "${query}"`);
-      console.log(`[ManagedBot ${this.botData.id}] prefix play succeeded, nowPlaying:`, result.nowPlaying?.title);
-    } catch (error) {
-      const errorMsg = this.toErrorMessage(error);
-      console.error(`[ManagedBot ${this.botData.id}] prefix play failed:`, errorMsg);
-      logger.warn("Managed bot prefix play add failed", {
-        botId: this.botData.id,
-        userId: message.author.id,
-        query,
-        error: errorMsg
-      });
-      await this.replyWithFallback(message, this.t(`❌ ${errorMsg}`, `❌ ${errorMsg}`));
-      return true;
-    }
     if (!result.nowPlaying) {
       const reason = this.player.getLastError();
       logger.warn("Managed bot prefix play unresolved nowPlaying", {
@@ -1341,6 +1478,7 @@ export class ManagedBotRuntime {
     }
 
     this.player.skip();
+    await this.logMusicAction(message.author.id, message.author.tag, "skip");
     await message.reply(this.t("⏭️ Skipped.", "⏭️ تم التخطي."));
     return true;
   }
@@ -1370,6 +1508,7 @@ export class ManagedBotRuntime {
     }
 
     this.player.stop();
+    await this.logMusicAction(message.author.id, message.author.tag, "stop");
     await message.reply(this.t("⏹️ Stopped and cleared queue.", "⏹️ تم الإيقاف ومسح القائمة."));
     return true;
   }
@@ -1405,6 +1544,7 @@ export class ManagedBotRuntime {
     }
 
     this.player.setVolume(value);
+    await this.logMusicAction(message.author.id, message.author.tag, "volume", { volume: value });
     await message.reply(this.t(`🔊 Volume: ${this.player.getVolume()}%`, `🔊 مستوى الصوت: ${this.player.getVolume()}%`));
     return true;
   }
@@ -2187,7 +2327,10 @@ export class ManagedBotRuntime {
         [
           this.t("Slash commands:", "الأوامر السلاش:"),
           "/play, /skip, /stop, /pause, /resume, /queue, /nowplaying, /remove, /clear, /shuffle, /loop, /volume, /lyrics",
-          "/help, /status, /diagnostics, /setup",
+          "/help, /status, /diagnostics, /setup, /roomlink",
+          "",
+          this.t("Web controls:", "التحكم من الويب:"),
+          this.t("Use /roomlink to post a page where voice-room members can control music after Discord login.", "استخدم /roomlink لنشر صفحة يتحكم منها أعضاء الروم الصوتي بعد تسجيل الدخول."),
           "",
           this.t("Mention commands:", "أوامر المنشن:"),
           "@bot setup, @bot come, @bot leave",
@@ -2775,7 +2918,8 @@ export class ManagedBotRuntime {
       { name: "help", description: this.t("Show command help", "عرض مساعدة الأوامر") },
       { name: "status", description: this.t("Show bot and playback status", "عرض حالة البوت والتشغيل") },
       { name: "diagnostics", description: this.t("Show bot diagnostics", "عرض تشخيص البوت") },
-      { name: "setup", description: this.t("Open bot setup panel", "فتح لوحة إعداد البوت") }
+      { name: "setup", description: this.t("Open bot setup panel", "فتح لوحة إعداد البوت") },
+      { name: "roomlink", description: this.t("Post the public web music room link", "نشر رابط روم الموسيقى على الويب") }
     ]);
   }
 

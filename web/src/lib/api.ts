@@ -1,5 +1,5 @@
 import { clearSession, getStoredToken, getStoredUser, storeSession } from "./auth";
-import type { AccessDto, AdminBotRow, AuditEntryDto, AuthUser, BotDto, BulkUpdateResult, ChannelDto, GuildDto, PlayerStateDto, SubscriptionDto } from "./types";
+import type { AccessDto, AdminBotRow, AuditEntryDto, AuthUser, BotDto, BulkUpdateResult, ChannelDto, GuildDto, PlayerStateDto, RoomActionDto, RoomLinkDto, RoomPageDto, SubscriptionDto } from "./types";
 
 // Empty string = same-origin. Requests go to /api/* on this site and Next.js
 // rewrites proxy them to the bot host (see next.config.ts), avoiding both
@@ -83,7 +83,12 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 401) {
     clearSession();
     if (typeof window !== "undefined") {
-      window.location.href = "/";
+      const path = window.location.pathname;
+      if (path.startsWith("/room/")) {
+        window.localStorage.setItem("bot_control_return_to", path);
+      } else {
+        window.location.href = "/";
+      }
     }
     throw new Error("Unauthorized");
   }
@@ -244,6 +249,68 @@ export async function playerPlay(id: string, query: string): Promise<{ player: P
 
 export async function playerSetVolume(id: string, percent: number): Promise<{ player: PlayerStateDto }> {
   return apiFetch(`/api/bots/${id}/player/volume`, {
+    method: "PATCH",
+    body: JSON.stringify({ percent })
+  });
+}
+
+export async function playerClear(id: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/bots/${id}/player/clear`, { method: "POST" });
+}
+
+export async function fetchRoomLink(id: string): Promise<RoomLinkDto> {
+  return apiFetch(`/api/bots/${id}/room-link`);
+}
+
+export async function enableRoomLink(id: string): Promise<RoomLinkDto> {
+  return apiFetch(`/api/bots/${id}/room-link`, { method: "POST" });
+}
+
+export async function rotateRoomLink(id: string): Promise<RoomLinkDto> {
+  return apiFetch(`/api/bots/${id}/room-link/rotate`, { method: "POST" });
+}
+
+export async function disableRoomLink(id: string): Promise<RoomLinkDto> {
+  return apiFetch(`/api/bots/${id}/room-link`, { method: "DELETE" });
+}
+
+export async function fetchRoomActions(id: string): Promise<{ actions: RoomActionDto[] }> {
+  return apiFetch(`/api/bots/${id}/room-actions`);
+}
+
+export async function fetchRoomPage(token: string): Promise<RoomPageDto> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}`);
+}
+
+export async function roomPlayerPause(token: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/pause`, { method: "POST" });
+}
+
+export async function roomPlayerResume(token: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/resume`, { method: "POST" });
+}
+
+export async function roomPlayerSkip(token: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/skip`, { method: "POST" });
+}
+
+export async function roomPlayerStop(token: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/stop`, { method: "POST" });
+}
+
+export async function roomPlayerClear(token: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/clear`, { method: "POST" });
+}
+
+export async function roomPlayerPlay(token: string, query: string): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/play`, {
+    method: "POST",
+    body: JSON.stringify({ query })
+  });
+}
+
+export async function roomPlayerSetVolume(token: string, percent: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/volume`, {
     method: "PATCH",
     body: JSON.stringify({ percent })
   });

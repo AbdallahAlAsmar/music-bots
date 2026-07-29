@@ -11,6 +11,9 @@ import { normalizePxSubscriptionId, toPxSubscriptionId } from "../utils/subscrip
 import type { PlanDays } from "../utils/subscription-plan.js";
 import type { NotificationService } from "../services/notification-service.js";
 import type { AuditRepository } from "../repositories/audit-repository.js";
+import { RoomLinkRepository, type RoomLinkEntity } from "../repositories/room-link-repository.js";
+import { RoomActionRepository, type RoomActionEntity, type RoomActionSource } from "../repositories/room-action-repository.js";
+import { botDisplayName } from "../utils/bot-token.js";
 
 type BotHealthPatch = Pick<BotEntity, "runtime_state" | "last_error" | "last_ready_at" | "last_command_at" | "health_updated_at">;
 export type MusicStateSnapshot = {
@@ -20,12 +23,27 @@ export type MusicStateSnapshot = {
   loop: import("../music/types.js").LoopMode;
   isPaused: boolean;
   isConnected: boolean;
+  positionMs: number;
+};
+
+export type RoomSummary = {
+  botId: string;
+  displayName: string;
+  avatar: string | null;
+  language: "ar" | "en" | null;
+  voiceChannelId: string | null;
+  voiceChannelName: string | null;
+  runtimeState: string | null;
+  isRunning: boolean;
+  roomUrl: string;
 };
 
 export class BotManager {
   private readonly runtimes = new Map<string, ManagedBotRuntime>();
   private readonly startInFlight = new Map<string, Promise<void>>();
   private readonly permissionService: PermissionService;
+  private readonly roomLinkRepo: RoomLinkRepository;
+  private readonly roomActionRepo: RoomActionRepository;
   private startSlotsInUse = 0;
   private readonly startWaiters: Array<() => void> = [];
 
@@ -34,9 +52,18 @@ export class BotManager {
     private readonly subRepo: SubscriptionRepository,
     private readonly accessRepo: AccessRepository,
     private readonly notifications?: NotificationService,
-    private readonly auditRepo?: AuditRepository
+    private readonly auditRepo?: AuditRepository,
+    roomLinkRepo?: RoomLinkRepository,
+    roomActionRepo?: RoomActionRepository
   ) {
     this.permissionService = new PermissionService(accessRepo);
+    this.roomLinkRepo = roomLinkRepo ?? new RoomLinkRepository();
+    this.roomActionRepo = roomActionRepo ?? new RoomActionRepository();
+  }
+
+  roomUrlForToken(token: string): string {
+    const origin = env.webOrigin.replace(/\/$/, "");
+    return `${origin}/room/${token}`;
   }
 
   get size(): number {
@@ -657,8 +684,8 @@ export class BotManager {
   async controlMusicForUser(
     requesterId: string,
     botId: string,
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume",
-    payload?: { query?: string; volume?: number }
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
+    payload?: { query?: string; volume?: number; actorTag?: string }
   ): Promise<MusicStateSnapshot> {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     const runtime = this.runtimes.get(botId);
@@ -667,7 +694,173 @@ export class BotManager {
     }
     await runtime.controlMusic(action, { ...payload, requesterId });
     await this.writeAudit(botId, requesterId, `music_${action}`, payload as Record<string, unknown>);
+    await this.recordRoomAction({
+      botId,
+      actorId: requesterId,
+      actorTag: payload?.actorTag ?? `web:${requesterId}`,
+      action,
+      details: payload as Record<string, unknown> | undefined,
+      source: "dashboard"
+    });
     return runtime.getMusicState();
+  }
+
+  async getRoomLinkForUser(requesterId: string, botId: string): Promise<{ link: RoomLinkEntity | null; url: string | null }> {
+    await this.permissionService.assertRole(botId, requesterId, "viewer");
+    const link = await this.roomLinkRepo.findActiveByBotId(botId);
+    return { link, url: link ? this.roomUrlForToken(link.token) : null };
+  }
+
+  async enableRoomLinkForUser(requesterId: string, botId: string): Promise<{ link: RoomLinkEntity; url: string }> {
+    await this.permissionService.assertRole(botId, requesterId, "admin");
+    const existing = await this.roomLinkRepo.findActiveByBotId(botId);
+    const link = existing ?? (await this.roomLinkRepo.create(botId, requesterId));
+    await this.writeAudit(botId, requesterId, "room_link_enable");
+    return { link, url: this.roomUrlForToken(link.token) };
+  }
+
+  async rotateRoomLinkForUser(requesterId: string, botId: string): Promise<{ link: RoomLinkEntity; url: string }> {
+    await this.permissionService.assertRole(botId, requesterId, "admin");
+    const link = await this.roomLinkRepo.rotate(botId, requesterId);
+    await this.writeAudit(botId, requesterId, "room_link_rotate");
+    return { link, url: this.roomUrlForToken(link.token) };
+  }
+
+  async disableRoomLinkForUser(requesterId: string, botId: string): Promise<void> {
+    await this.permissionService.assertRole(botId, requesterId, "admin");
+    await this.roomLinkRepo.disable(botId);
+    await this.writeAudit(botId, requesterId, "room_link_disable");
+  }
+
+  async listRoomActionsForUser(requesterId: string, botId: string, limit = 30): Promise<RoomActionEntity[]> {
+    await this.permissionService.assertRole(botId, requesterId, "viewer");
+    return this.roomActionRepo.listByBotId(botId, limit);
+  }
+
+  async resolveRoomByToken(token: string): Promise<{
+    link: RoomLinkEntity;
+    bot: BotEntity;
+    summary: RoomSummary;
+  }> {
+    const link = await this.roomLinkRepo.findActiveByToken(token);
+    if (!link) {
+      throw new Error("Room link not found");
+    }
+    const bot = await this.botRepo.findById(link.bot_id);
+    if (!bot) {
+      throw new Error("Bot not found");
+    }
+    const runtime = this.runtimes.get(bot.id);
+    const voiceChannelName = runtime ? await runtime.getAssignedVoiceChannelName() : null;
+    return {
+      link,
+      bot,
+      summary: {
+        botId: bot.id,
+        displayName: botDisplayName(bot),
+        avatar: bot.avatar,
+        language: bot.language,
+        voiceChannelId: bot.voice_channel_id,
+        voiceChannelName,
+        runtimeState: bot.runtime_state,
+        isRunning: Boolean(runtime),
+        roomUrl: this.roomUrlForToken(link.token)
+      }
+    };
+  }
+
+  async getRoomStateForUser(
+    token: string,
+    requesterId: string
+  ): Promise<{
+    summary: RoomSummary;
+    inVoice: boolean;
+    canControl: boolean;
+    player: MusicStateSnapshot | null;
+    actions: RoomActionEntity[];
+  }> {
+    const { bot, summary } = await this.resolveRoomByToken(token);
+    const runtime = this.runtimes.get(bot.id);
+    if (!runtime) {
+      return {
+        summary,
+        inVoice: false,
+        canControl: false,
+        player: null,
+        actions: await this.roomActionRepo.listByBotId(bot.id, 30)
+      };
+    }
+    const voice = await runtime.isUserInAssignedVoice(requesterId);
+    const inVoice = voice.inVoice;
+    return {
+      summary: {
+        ...summary,
+        voiceChannelName: voice.channelName ?? summary.voiceChannelName
+      },
+      inVoice,
+      canControl: inVoice,
+      player: runtime.getMusicState(),
+      actions: await this.roomActionRepo.listByBotId(bot.id, 30)
+    };
+  }
+
+  async listRoomActionsByToken(token: string, limit = 30): Promise<RoomActionEntity[]> {
+    const { bot } = await this.resolveRoomByToken(token);
+    return this.roomActionRepo.listByBotId(bot.id, limit);
+  }
+
+  async controlMusicForRoom(
+    token: string,
+    requesterId: string,
+    actorTag: string,
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
+    payload?: { query?: string; volume?: number }
+  ): Promise<MusicStateSnapshot> {
+    const { bot } = await this.resolveRoomByToken(token);
+    const runtime = this.runtimes.get(bot.id);
+    if (!runtime) {
+      throw new Error("Bot runtime is not running");
+    }
+    const voice = await runtime.isUserInAssignedVoice(requesterId);
+    if (!voice.inVoice) {
+      throw new Error("You must be in the assigned voice channel to control this bot");
+    }
+    await runtime.controlMusic(action, { ...payload, requesterId });
+    await this.recordRoomAction({
+      botId: bot.id,
+      actorId: requesterId,
+      actorTag,
+      action,
+      details: payload as Record<string, unknown> | undefined,
+      source: "room"
+    });
+    return runtime.getMusicState();
+  }
+
+  async recordRoomAction(input: {
+    botId: string;
+    actorId: string;
+    actorTag: string;
+    action: string;
+    details?: Record<string, unknown> | null;
+    source: RoomActionSource;
+  }): Promise<void> {
+    try {
+      await this.roomActionRepo.create({
+        bot_id: input.botId,
+        actor_id: input.actorId,
+        actor_tag: input.actorTag,
+        action: input.action,
+        details: input.details ?? null,
+        source: input.source
+      });
+    } catch (error) {
+      logger.warn("Room action logging failed", {
+        botId: input.botId,
+        action: input.action,
+        error: (error as Error).message
+      });
+    }
   }
 
   async listAuditForUser(requesterId: string, botId: string, limit = 50) {
@@ -766,7 +959,16 @@ export class BotManager {
           restart: (requesterId, id) => this.restartBot(requesterId, id),
           listOwnedBots: (ownerId) => this.getOwnedBots(ownerId),
           getPrimaryOwnedBot: (ownerId) => this.getPrimaryManagementBot(ownerId),
-          updateHealth: (id, patch) => this.updateBotHealth(id, patch)
+          updateHealth: (id, patch) => this.updateBotHealth(id, patch),
+          enableRoomLink: async (requesterId, id) => {
+            const result = await this.enableRoomLinkForUser(requesterId, id);
+            return { url: result.url, token: result.link.token };
+          },
+          getRoomLinkUrl: async (id) => {
+            const link = await this.roomLinkRepo.findActiveByBotId(id);
+            return link ? this.roomUrlForToken(link.token) : null;
+          },
+          recordRoomAction: (input) => this.recordRoomAction(input)
         },
         async (id, reason) => {
           logger.warn("Runtime fault detected", { botId: id, reason });

@@ -77,3 +77,33 @@ create index if not exists idx_subscriptions_active on public.subscriptions(acti
 create index if not exists idx_bot_access_lookup on public.bot_access(bot_id, user_id);
 create index if not exists idx_discord_user_cache_updated_at on public.discord_user_cache(updated_at);
 create index if not exists idx_audit_log_bot_created_at on public.audit_log(bot_id, created_at desc);
+
+create table if not exists public.bot_room_links (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.bots(id) on delete cascade,
+  token text not null unique,
+  enabled boolean not null default true,
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+
+create unique index if not exists idx_bot_room_links_one_active
+  on public.bot_room_links(bot_id)
+  where enabled = true and revoked_at is null;
+
+create index if not exists idx_bot_room_links_token on public.bot_room_links(token);
+
+create table if not exists public.bot_room_actions (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.bots(id) on delete cascade,
+  actor_id text not null,
+  actor_tag text not null,
+  action text not null,
+  details jsonb,
+  source text not null check (source in ('discord', 'dashboard', 'room')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_bot_room_actions_bot_created_at
+  on public.bot_room_actions(bot_id, created_at desc);

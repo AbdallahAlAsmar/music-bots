@@ -8,6 +8,11 @@ import {
   fetchChannels,
   fetchGuilds,
   fetchInvite,
+  fetchRoomActions,
+  fetchRoomLink,
+  enableRoomLink,
+  rotateRoomLink,
+  disableRoomLink,
   grantAccess,
   revokeAccess,
   startBot,
@@ -16,10 +21,11 @@ import {
   updateBot,
   updateGuild
 } from "@/lib/api";
-import type { AccessDto, AuditEntryDto, BotDto, ChannelDto, GuildDto, SubscriptionDto } from "@/lib/types";
+import type { AccessDto, AuditEntryDto, BotDto, ChannelDto, GuildDto, RoomActionDto, RoomLinkDto, SubscriptionDto } from "@/lib/types";
 import { BotAvatar } from "@/components/bot-avatar";
 import { effectiveBotStatus, runtimeTone, StatusBadge } from "@/components/status-badge";
 import { NowPlaying } from "@/components/now-playing";
+import { ActionLog } from "@/components/player-panel";
 import { Select } from "@/components/select";
 import { useLocale } from "@/components/locale-provider";
 import {
@@ -84,6 +90,10 @@ export function BotEditor({
   const [access, setAccess] = useState<AccessDto[]>([]);
   const [audit, setAudit] = useState<AuditEntryDto[]>([]);
   const [invite, setInvite] = useState<string | null>(null);
+  const [roomLink, setRoomLink] = useState<RoomLinkDto | null>(null);
+  const [roomActions, setRoomActions] = useState<RoomActionDto[]>([]);
+  const [roomBusy, setRoomBusy] = useState(false);
+  const [roomCopied, setRoomCopied] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -179,7 +189,68 @@ export function BotEditor({
         setGuilds([]);
         setGuildsError(err.message);
       });
+    void fetchRoomLink(bot.id)
+      .then((res) => setRoomLink(res))
+      .catch(() => setRoomLink(null));
+    void fetchRoomActions(bot.id)
+      .then((res) => setRoomActions(res.actions))
+      .catch(() => setRoomActions([]));
   }, [bot.id]);
+
+  async function handleRoomLink(action: "enable" | "rotate" | "disable") {
+    setRoomBusy(true);
+    setError(null);
+    try {
+      const result =
+        action === "enable"
+          ? await enableRoomLink(bot.id)
+          : action === "rotate"
+            ? await rotateRoomLink(bot.id)
+            : await disableRoomLink(bot.id);
+      setRoomLink(result);
+      setMessage(
+        action === "enable"
+          ? "Room link enabled"
+          : action === "rotate"
+            ? "Room link rotated"
+            : "Room link disabled"
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Room link update failed");
+    } finally {
+      setRoomBusy(false);
+    }
+  }
+
+  async function handleCopyRoomLink() {
+    if (!roomLink?.url) return;
+    await navigator.clipboard.writeText(roomLink.url);
+    setRoomCopied(true);
+    setTimeout(() => setRoomCopied(false), 2000);
+  }
+
+  useEffect(() => {
+    if (tab !== "music") return;
+    let cancelled = false;
+    const load = () => {
+      void fetchRoomActions(bot.id)
+        .then((res) => {
+          if (!cancelled) setRoomActions(res.actions);
+        })
+        .catch(() => undefined);
+      void fetchRoomLink(bot.id)
+        .then((res) => {
+          if (!cancelled) setRoomLink(res);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const timer = setInterval(load, 8_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [bot.id, tab]);
 
   useEffect(() => {
     if (!message) return;
@@ -305,7 +376,8 @@ export function BotEditor({
   const setupSteps = [
     { done: Boolean(bot.name?.trim()), label: "Give your bot a name", goto: "profile" as Tab },
     { done: Boolean(bot.voice_channel_id), label: "Assign a voice channel", goto: "setup" as Tab },
-    { done: bot.status === "active", label: "Start the bot", goto: "setup" as Tab }
+    { done: bot.status === "active", label: "Start the bot", goto: "setup" as Tab },
+    { done: Boolean(roomLink?.enabled && roomLink.url), label: "Share the web room link", goto: "music" as Tab }
   ];
   const setupDone = setupSteps.filter((s) => s.done).length;
   const setupComplete = setupDone === setupSteps.length;
@@ -654,7 +726,51 @@ export function BotEditor({
 
       {/* Tab: Music */}
       {tab === "music" ? (
-        <div className="mt-6">
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Panel
+              title="Public room link"
+              description="Members in the assigned voice channel can sign in with Discord and control music from the website."
+            >
+              {roomLink?.enabled && roomLink.url ? (
+                <>
+                  <div className="flex gap-2">
+                    <input className="field" readOnly value={roomLink.url} />
+                    <button type="button" className="btn-secondary shrink-0" onClick={() => void handleCopyRoomLink()}>
+                      {roomCopied ? <CheckIcon className="h-4 w-4 text-emerald-400" /> : <CopyIcon className="h-4 w-4" />}
+                      {roomCopied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a href={roomLink.url} target="_blank" rel="noreferrer" className="btn-primary">
+                      <LinkIcon className="h-4 w-4" />
+                      Open room
+                    </a>
+                    <button type="button" className="btn-secondary" disabled={roomBusy} onClick={() => void handleRoomLink("rotate")}>
+                      Rotate link
+                    </button>
+                    <button type="button" className="btn-danger" disabled={roomBusy} onClick={() => void handleRoomLink("disable")}>
+                      Disable
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    Tip: run <code className="text-slate-300">/roomlink</code> in Discord to post this link in the channel.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-400">
+                    Enable a shareable page so people in your voice room can queue and control tracks from their phone or browser.
+                  </p>
+                  <button type="button" className="btn-primary mt-3" disabled={roomBusy} onClick={() => void handleRoomLink("enable")}>
+                    <LinkIcon className="h-4 w-4" />
+                    Enable room link
+                  </button>
+                </>
+              )}
+            </Panel>
+            <ActionLog actions={roomActions} emptyLabel="No music actions yet. Play something from Discord or the web room." />
+          </div>
           <NowPlaying botId={bot.id} />
         </div>
       ) : null}

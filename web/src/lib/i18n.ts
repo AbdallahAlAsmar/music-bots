@@ -12,7 +12,11 @@ const dict: Record<Locale, Record<string, string>> = {
     presence: "Presence",
     access: "Access",
     subscription: "Subscription",
-    music: "Music"
+    music: "Music",
+    roomLink: "Room link",
+    actionLog: "Action log",
+    joinVoice: "Join the assigned voice channel",
+    signInDiscord: "Sign in with Discord"
   },
   ar: {
     myBots: "بوتاتي",
@@ -25,7 +29,11 @@ const dict: Record<Locale, Record<string, string>> = {
     presence: "الحالة",
     access: "الصلاحيات",
     subscription: "الاشتراك",
-    music: "الموسيقى"
+    music: "الموسيقى",
+    roomLink: "رابط الروم",
+    actionLog: "سجل الإجراءات",
+    joinVoice: "ادخل الروم الصوتي المعيّن",
+    signInDiscord: "تسجيل الدخول عبر Discord"
   }
 };
 

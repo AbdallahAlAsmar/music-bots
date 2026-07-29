@@ -75,6 +75,49 @@ export type PlayerStateDto = {
   loop: "off" | "track" | "queue";
   isPaused: boolean;
   isConnected: boolean;
+  positionMs?: number;
+};
+
+export type RoomSummaryDto = {
+  botId: string;
+  displayName: string;
+  avatar: string | null;
+  language: "ar" | "en" | null;
+  voiceChannelId: string | null;
+  voiceChannelName: string | null;
+  runtimeState: string | null;
+  isRunning: boolean;
+  roomUrl: string;
+};
+
+export type RoomActionDto = {
+  id: string;
+  bot_id: string;
+  actor_id: string;
+  actor_tag: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  source: "discord" | "dashboard" | "room";
+  created_at: string;
+  username?: string | null;
+  avatar_url?: string | null;
+};
+
+export type RoomLinkDto = {
+  enabled: boolean;
+  token: string | null;
+  url: string | null;
+  created_at?: string | null;
+};
+
+export type RoomPageDto = {
+  room: RoomSummaryDto;
+  authenticated: boolean;
+  inVoice: boolean;
+  canControl: boolean;
+  player: PlayerStateDto | null;
+  actions: RoomActionDto[];
+  user?: AuthUser;
 };
 
 export type AdminBotRow = {

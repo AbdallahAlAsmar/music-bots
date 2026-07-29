@@ -226,7 +226,7 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     const user = c.get("user");
     const botId = c.req.param("id");
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "pause");
+      const state = await manager.controlMusicForUser(user.id, botId, "pause", { actorTag: user.username });
       return c.json({ player: toPlayerStateDto(state) });
     } catch (error) {
       const mapped = mapError(error);
@@ -238,7 +238,7 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     const user = c.get("user");
     const botId = c.req.param("id");
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "resume");
+      const state = await manager.controlMusicForUser(user.id, botId, "resume", { actorTag: user.username });
       return c.json({ player: toPlayerStateDto(state) });
     } catch (error) {
       const mapped = mapError(error);
@@ -250,7 +250,7 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     const user = c.get("user");
     const botId = c.req.param("id");
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "skip");
+      const state = await manager.controlMusicForUser(user.id, botId, "skip", { actorTag: user.username });
       return c.json({ player: toPlayerStateDto(state) });
     } catch (error) {
       const mapped = mapError(error);
@@ -266,7 +266,7 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
       return c.json({ error: "query is required" }, 400);
     }
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "play", { query: body.query.trim() });
+      const state = await manager.controlMusicForUser(user.id, botId, "play", { query: body.query.trim(), actorTag: user.username });
       return c.json({ player: toPlayerStateDto(state) });
     } catch (error) {
       const mapped = mapError(error);
@@ -278,7 +278,7 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     const user = c.get("user");
     const botId = c.req.param("id");
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "stop");
+      const state = await manager.controlMusicForUser(user.id, botId, "stop", { actorTag: user.username });
       return c.json({ player: toPlayerStateDto(state) });
     } catch (error) {
       const mapped = mapError(error);
@@ -294,8 +294,112 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
       return c.json({ error: "percent is required" }, 400);
     }
     try {
-      const state = await manager.controlMusicForUser(user.id, botId, "volume", { volume: body.percent });
+      const state = await manager.controlMusicForUser(user.id, botId, "volume", {
+        volume: body.percent,
+        actorTag: user.username
+      });
       return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/clear", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "clear", { actorTag: user.username });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.get("/:id/room-link", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const result = await manager.getRoomLinkForUser(user.id, botId);
+      return c.json({
+        enabled: Boolean(result.link),
+        token: result.link?.token ?? null,
+        url: result.url,
+        created_at: result.link?.created_at ?? null
+      });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/room-link", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const result = await manager.enableRoomLinkForUser(user.id, botId);
+      return c.json({
+        enabled: true,
+        token: result.link.token,
+        url: result.url,
+        created_at: result.link.created_at
+      });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/room-link/rotate", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const result = await manager.rotateRoomLinkForUser(user.id, botId);
+      return c.json({
+        enabled: true,
+        token: result.link.token,
+        url: result.url,
+        created_at: result.link.created_at
+      });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.delete("/:id/room-link", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      await manager.disableRoomLinkForUser(user.id, botId);
+      return c.json({ enabled: false, token: null, url: null });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.get("/:id/room-actions", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    try {
+      const rows = await manager.listRoomActionsForUser(user.id, botId, 30);
+      const users = await Promise.all(rows.map((row) => discordUserService.getUser(row.actor_id)));
+      return c.json({
+        actions: rows.map((row, index) => ({
+          id: row.id,
+          bot_id: row.bot_id,
+          actor_id: row.actor_id,
+          actor_tag: row.actor_tag,
+          action: row.action,
+          details: row.details,
+          source: row.source,
+          created_at: row.created_at,
+          username: users[index]?.global_name ?? users[index]?.username ?? row.actor_tag,
+          avatar_url: users[index]?.avatar_url ?? null
+        }))
+      });
     } catch (error) {
       const mapped = mapError(error);
       return c.json({ error: mapped.message }, mapped.status);

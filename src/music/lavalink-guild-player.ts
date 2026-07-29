@@ -297,6 +297,14 @@ export class LavalinkGuildPlayer {
     return this.paused;
   }
 
+  getPositionMs(): number {
+    if (!this.lavalinkPlayer || !this.nowPlaying) {
+      return 0;
+    }
+    const position = Number(this.lavalinkPlayer.position ?? 0);
+    return Number.isFinite(position) && position > 0 ? Math.floor(position) : 0;
+  }
+
   getLastError(): string | null {
     return this.lastError;
   }

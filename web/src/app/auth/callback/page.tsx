@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { exchangeDiscordCode } from "@/lib/api";
-import { storeSession, validateAndConsumeOAuthState } from "@/lib/auth";
+import { storeSession, validateAndConsumeOAuthState, consumeReturnTo } from "@/lib/auth";
 import { AlertIcon, MusicIcon } from "@/components/icons";
 
 function AuthCallbackContent() {
@@ -28,7 +28,7 @@ function AuthCallbackContent() {
     void exchangeDiscordCode(code, state!)
       .then((session) => {
         storeSession(session.token, session.user);
-        router.replace("/dashboard");
+        router.replace(consumeReturnTo() ?? "/dashboard");
       })
       .catch((err: Error) => {
         setError(err.message);

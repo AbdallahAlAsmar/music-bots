@@ -12,6 +12,7 @@ import { createBotRoutes } from "./routes/bots.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createLicenseRoutes } from "./routes/licenses.js";
 import { createUploadRoutes } from "./routes/upload.js";
+import { createRoomRoutes } from "./routes/room.js";
 import { DiscordUserService } from "../services/discord-user-service.js";
 
 export function createApiApp(
@@ -39,6 +40,7 @@ export function createApiApp(
     "/api/bots",
     createBotRoutes({ manager, subRepo, accessRepo, discordUserService }).use("*", rateLimitMiddleware(120, 60_000))
   );
+  app.route("/api/room", createRoomRoutes({ manager, discordUserService }));
 
   // PX License endpoints (/, /validate, /check, /health) share this port so
   // the standalone PX-Licence Express server no longer needs to bind one.

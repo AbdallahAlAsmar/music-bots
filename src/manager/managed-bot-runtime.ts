@@ -3170,14 +3170,7 @@ export class ManagedBotRuntime {
     return true;
   }
 
-  private async resolveControlTextChannelId(): Promise<string | null> {
-    if (this.musicAnnouncementChannelId) {
-      return this.musicAnnouncementChannelId;
-    }
-    if (this.botData.log_channel_id) {
-      return this.botData.log_channel_id;
-    }
-
+  private async resolveVoiceRoomTextChannelId(): Promise<string | null> {
     const assigned = this.botData.voice_channel_id;
     if (!assigned) {
       return null;
@@ -3196,16 +3189,71 @@ export class ManagedBotRuntime {
     }
 
     const parentId = voiceChannel.parentId;
-    const textChannel = guild.channels.cache
-      .filter((channel) => channel.isTextBased() && !channel.isThread() && channel.id !== assigned && (!parentId || channel.parentId === parentId))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .first();
+    const voiceName = voiceChannel.name.trim().toLowerCase();
+    const candidates = guild.channels.cache
+      .filter(
+        (channel) =>
+          channel.isTextBased() &&
+          !channel.isThread() &&
+          channel.id !== assigned &&
+          (!parentId || channel.parentId === parentId)
+      )
+      .map((channel) => channel);
 
-    if (textChannel) {
-      return textChannel.id;
+    if (!candidates.length && parentId) {
+      await guild.channels.fetch().catch(() => undefined);
+      guild.channels.cache.forEach((channel) => {
+        if (
+          channel.isTextBased() &&
+          !channel.isThread() &&
+          channel.id !== assigned &&
+          channel.parentId === parentId &&
+          !candidates.some((candidate) => candidate.id === channel.id)
+        ) {
+          candidates.push(channel);
+        }
+      });
     }
 
-    return guild.systemChannelId ?? null;
+    if (!candidates.length) {
+      return guild.systemChannelId ?? this.botData.log_channel_id ?? null;
+    }
+
+    const normalizedVoiceName = voiceName.replace(/[^a-z0-9\u0600-\u06FF]+/gi, " ").trim();
+    const scored = candidates
+      .map((channel) => {
+        const name = channel.name.trim().toLowerCase();
+        const normalizedName = name.replace(/[^a-z0-9\u0600-\u06FF]+/gi, " ").trim();
+        let score = 0;
+        if (name === voiceName || normalizedName === normalizedVoiceName) {
+          score += 100;
+        } else if (normalizedVoiceName && (normalizedName.includes(normalizedVoiceName) || normalizedVoiceName.includes(normalizedName))) {
+          score += 80;
+        } else if (/(general|chat|text|talk|lobby|main)/i.test(name)) {
+          score += 40;
+        }
+        return { channel, score };
+      })
+      .sort((a, b) => b.score - a.score || a.channel.name.localeCompare(b.channel.name));
+
+    return scored[0]?.channel.id ?? guild.systemChannelId ?? this.botData.log_channel_id ?? null;
+  }
+
+  private async resolveControlTextChannelId(preferVoiceRoom = false): Promise<string | null> {
+    if (!preferVoiceRoom && this.musicAnnouncementChannelId && this.musicAnnouncementChannelId !== this.botData.log_channel_id) {
+      return this.musicAnnouncementChannelId;
+    }
+
+    const voiceRoomChannelId = await this.resolveVoiceRoomTextChannelId();
+    if (voiceRoomChannelId) {
+      return voiceRoomChannelId;
+    }
+
+    if (this.musicAnnouncementChannelId && this.musicAnnouncementChannelId !== this.botData.log_channel_id) {
+      return this.musicAnnouncementChannelId;
+    }
+
+    return this.botData.log_channel_id ?? null;
   }
 
   private async buildStickyControlComponents(): Promise<ActionRowBuilder<MessageActionRowComponentBuilder>[]> {
@@ -3224,7 +3272,7 @@ export class ManagedBotRuntime {
     return components;
   }
 
-  private async upsertStickyControlMessage(forceBump = false): Promise<void> {
+  private async upsertStickyControlMessage(forceBump = false, preferVoiceRoom = false): Promise<void> {
     if (this.stickyRefreshInFlight) {
       await this.stickyRefreshInFlight.catch(() => undefined);
       if (!forceBump) {
@@ -3232,7 +3280,7 @@ export class ManagedBotRuntime {
       }
     }
 
-    this.stickyRefreshInFlight = this.upsertStickyControlMessageInternal(forceBump);
+    this.stickyRefreshInFlight = this.upsertStickyControlMessageInternal(forceBump, preferVoiceRoom);
     try {
       await this.stickyRefreshInFlight;
     } finally {
@@ -3240,13 +3288,15 @@ export class ManagedBotRuntime {
     }
   }
 
-  private async upsertStickyControlMessageInternal(forceBump: boolean): Promise<void> {
-    const channelId = await this.resolveControlTextChannelId();
+  private async upsertStickyControlMessageInternal(forceBump: boolean, preferVoiceRoom: boolean): Promise<void> {
+    const channelId = await this.resolveControlTextChannelId(preferVoiceRoom);
     if (!channelId) {
       return;
     }
 
-    this.musicAnnouncementChannelId = channelId;
+    if (channelId !== this.botData.log_channel_id) {
+      this.musicAnnouncementChannelId = channelId;
+    }
 
     const channel = await this.client.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.isTextBased() || !("send" in channel) || typeof channel.send !== "function") {
@@ -3267,6 +3317,16 @@ export class ManagedBotRuntime {
           .setColor(0x10b981);
     const components = await this.buildStickyControlComponents();
     const payload = { embeds: [embed], components };
+
+    if (this.stickyControlMessageId && this.stickyControlChannelId && this.stickyControlChannelId !== channelId) {
+      const oldChannel = await this.client.channels.fetch(this.stickyControlChannelId).catch(() => null);
+      if (oldChannel && oldChannel.isTextBased() && "messages" in oldChannel) {
+        const oldMessage = await oldChannel.messages.fetch(this.stickyControlMessageId).catch(() => null);
+        await oldMessage?.delete().catch(() => undefined);
+      }
+      this.stickyControlMessageId = null;
+      this.stickyControlChannelId = null;
+    }
 
     if (forceBump && this.stickyControlMessageId && this.stickyControlChannelId === channelId) {
       const oldMessage = await channel.messages.fetch(this.stickyControlMessageId).catch(() => null);
@@ -3423,7 +3483,7 @@ export class ManagedBotRuntime {
           last_error: null,
           health_updated_at: new Date().toISOString()
         });
-        void this.upsertStickyControlMessage(true);
+        void this.upsertStickyControlMessage(true, true);
         return;
       } catch (error) {
         lastError = error as Error;

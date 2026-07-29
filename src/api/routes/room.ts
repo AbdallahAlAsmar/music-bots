@@ -118,11 +118,14 @@ export function createRoomRoutes(deps: RoomRouteDeps): Hono<{ Variables: AuthVar
 
   async function controlMusic(
     c: Context<{ Variables: AuthVariables }>,
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
-    payload?: { query?: string; volume?: number }
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear" | "seek" | "remove" | "reorder",
+    payload?: { query?: string; volume?: number; positionMs?: number; index?: number; fromIndex?: number; toIndex?: number }
   ) {
     const user = c.get("user");
     const token = c.req.param("token");
+    if (!token) {
+      return c.json({ error: "token is required" }, 400);
+    }
     try {
       const player = await manager.controlMusicForRoom(token, user.id, user.username, action, payload);
       return c.json({ player: toPlayerStateDto(player) });
@@ -150,6 +153,27 @@ export function createRoomRoutes(deps: RoomRouteDeps): Hono<{ Variables: AuthVar
       return c.json({ error: "percent is required" }, 400);
     }
     return controlMusic(c, "volume", { volume: body.percent });
+  });
+  app.patch("/:token/player/seek", authMiddleware, rateLimitMiddleware(40, 60_000), async (c) => {
+    const body = await c.req.json<{ position_ms?: number }>();
+    if (!Number.isFinite(body.position_ms)) {
+      return c.json({ error: "position_ms is required" }, 400);
+    }
+    return controlMusic(c, "seek", { positionMs: body.position_ms });
+  });
+  app.post("/:token/player/queue/remove", authMiddleware, rateLimitMiddleware(40, 60_000), async (c) => {
+    const body = await c.req.json<{ index?: number }>();
+    if (!Number.isFinite(body.index)) {
+      return c.json({ error: "index is required" }, 400);
+    }
+    return controlMusic(c, "remove", { index: body.index });
+  });
+  app.post("/:token/player/queue/reorder", authMiddleware, rateLimitMiddleware(40, 60_000), async (c) => {
+    const body = await c.req.json<{ from_index?: number; to_index?: number }>();
+    if (!Number.isFinite(body.from_index) || !Number.isFinite(body.to_index)) {
+      return c.json({ error: "from_index and to_index are required" }, 400);
+    }
+    return controlMusic(c, "reorder", { fromIndex: body.from_index, toIndex: body.to_index });
   });
 
   return app;

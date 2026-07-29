@@ -6,7 +6,10 @@ import {
   playerClear,
   playerPause,
   playerPlay,
+  playerRemoveQueueItem,
+  playerReorderQueue,
   playerResume,
+  playerSeek,
   playerSetVolume,
   playerSkip,
   playerStop
@@ -37,7 +40,10 @@ export function NowPlaying({ botId }: { botId: string }) {
       skip: () => playerSkip(botId),
       stop: () => playerStop(botId),
       clear: () => playerClear(botId),
-      setVolume: (percent) => playerSetVolume(botId, percent)
+      setVolume: (percent) => playerSetVolume(botId, percent),
+      seek: (positionMs) => playerSeek(botId, positionMs),
+      removeQueueItem: (index) => playerRemoveQueueItem(botId, index),
+      reorderQueue: (fromIndex, toIndex) => playerReorderQueue(botId, fromIndex, toIndex)
     }),
     [botId]
   );

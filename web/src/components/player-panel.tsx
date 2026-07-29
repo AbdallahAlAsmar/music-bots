@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerStateDto, RoomActionDto } from "@/lib/types";
 import { Equalizer } from "@/components/motion-primitives";
 import { AlertIcon, MusicIcon, PlayIcon, StopIcon } from "@/components/icons";
@@ -12,11 +12,46 @@ function formatMs(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function progressPercent(state: PlayerStateDto | null): number {
-  const duration = state?.nowPlaying?.durationSeconds;
-  const position = state?.positionMs ?? 0;
-  if (!duration || duration <= 0) return 0;
-  return Math.min(100, Math.max(0, (position / 1000 / duration) * 100));
+function durationMs(state: PlayerStateDto | null): number {
+  const seconds = state?.nowPlaying?.durationSeconds;
+  if (!seconds || seconds <= 0) return 0;
+  return seconds * 1000;
+}
+
+function useLivePosition(state: PlayerStateDto | null): number {
+  const [positionMs, setPositionMs] = useState(0);
+  const syncRef = useRef({ positionMs: 0, syncedAt: 0, isPaused: true, trackKey: "" });
+
+  useEffect(() => {
+    const trackKey = state?.nowPlaying?.url ?? "";
+    syncRef.current = {
+      positionMs: state?.positionMs ?? 0,
+      syncedAt: Date.now(),
+      isPaused: Boolean(state?.isPaused),
+      trackKey
+    };
+    setPositionMs(state?.positionMs ?? 0);
+  }, [state?.positionMs, state?.isPaused, state?.nowPlaying?.url]);
+
+  useEffect(() => {
+    if (!state?.nowPlaying || state.isPaused) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      const sync = syncRef.current;
+      if (sync.isPaused || !sync.trackKey) {
+        return;
+      }
+      const total = durationMs(state);
+      const next = sync.positionMs + (Date.now() - sync.syncedAt);
+      setPositionMs(total > 0 ? Math.min(next, total) : next);
+    }, 200);
+
+    return () => window.clearInterval(timer);
+  }, [state?.isPaused, state?.nowPlaying?.url]);
+
+  return positionMs;
 }
 
 export type PlayerController = {
@@ -27,6 +62,9 @@ export type PlayerController = {
   stop: () => Promise<{ player: PlayerStateDto }>;
   clear: () => Promise<{ player: PlayerStateDto }>;
   setVolume: (percent: number) => Promise<{ player: PlayerStateDto }>;
+  seek?: (positionMs: number) => Promise<{ player: PlayerStateDto }>;
+  removeQueueItem?: (index: number) => Promise<{ player: PlayerStateDto }>;
+  reorderQueue?: (fromIndex: number, toIndex: number) => Promise<{ player: PlayerStateDto }>;
 };
 
 type PlayerPanelProps = {
@@ -54,8 +92,13 @@ export function PlayerPanel({
 }: PlayerPanelProps) {
   const [query, setQuery] = useState("");
   const [pending, setPending] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
   const locked = disabled || busy || pending;
-  const percent = useMemo(() => progressPercent(state), [state]);
+  const livePositionMs = useLivePosition(state);
+  const totalMs = durationMs(state);
+  const displayPositionMs = seekPreviewMs ?? livePositionMs;
+  const percent = totalMs > 0 ? Math.min(100, Math.max(0, (displayPositionMs / totalMs) * 100)) : 0;
 
   async function runAction(action: () => Promise<{ player: PlayerStateDto }>) {
     setPending(true);
@@ -76,6 +119,31 @@ export function PlayerPanel({
     void runAction(() => controller.play(value));
     setQuery("");
   }
+
+  function seekFromInput(value: number) {
+    if (!controller.seek || locked || !state?.nowPlaying || totalMs <= 0) {
+      return;
+    }
+    const positionMs = Math.round((value / 100) * totalMs);
+    setSeekPreviewMs(positionMs);
+    void runAction(async () => {
+      const result = await controller.seek!(positionMs);
+      setSeekPreviewMs(null);
+      return result;
+    });
+  }
+
+  function removeQueueItem(index: number) {
+    if (!controller.removeQueueItem || locked) return;
+    void runAction(() => controller.removeQueueItem!(index));
+  }
+
+  function reorderQueue(fromIndex: number, toIndex: number) {
+    if (!controller.reorderQueue || locked || fromIndex === toIndex) return;
+    void runAction(() => controller.reorderQueue!(fromIndex, toIndex));
+  }
+
+  const queueItems = useMemo(() => state?.queue ?? [], [state?.queue]);
 
   return (
     <div className={compact ? "grid gap-4" : "grid gap-6 lg:grid-cols-2"}>
@@ -108,11 +176,23 @@ export function PlayerPanel({
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-white">{state.nowPlaying.title}</p>
                 <p className="truncate text-xs text-slate-400">{state.nowPlaying.artistName ?? "Unknown artist"}</p>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${percent}%` }} />
-                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={percent}
+                  disabled={locked || !controller.seek || totalMs <= 0}
+                  className="mt-2 w-full accent-emerald-400"
+                  onChange={(event) => {
+                    if (totalMs <= 0) return;
+                    setSeekPreviewMs(Math.round((Number(event.target.value) / 100) * totalMs));
+                  }}
+                  onMouseUp={(event) => seekFromInput(Number((event.target as HTMLInputElement).value))}
+                  onTouchEnd={(event) => seekFromInput(Number((event.target as HTMLInputElement).value))}
+                />
                 <p className="mt-1 text-xs text-slate-500">
-                  {formatMs(state.positionMs ?? 0)}
+                  {formatMs(displayPositionMs)}
                   {state.nowPlaying.duration ? ` / ${state.nowPlaying.duration}` : ""}
                 </p>
               </div>
@@ -190,12 +270,39 @@ export function PlayerPanel({
       {!compact ? (
         <section className="card p-5">
           <h3 className="text-lg font-semibold text-white">Queue</h3>
+          <p className="mt-1 text-xs text-slate-500">Drag to reorder. Remove items you no longer want.</p>
           <div className="scroll-thin mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
-            {state?.queue?.length ? (
-              state.queue.map((track, index) => (
-                <div key={`${track.url}-${index}`} className="rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2.5">
-                  <p className="truncate text-sm font-medium text-white">{track.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{track.artistName ?? "Unknown artist"}</p>
+            {queueItems.length ? (
+              queueItems.map((track, index) => (
+                <div
+                  key={`${track.url}-${index}`}
+                  draggable={!locked && Boolean(controller.reorderQueue)}
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                  }}
+                  onDrop={() => {
+                    if (dragIndex === null) return;
+                    reorderQueue(dragIndex, index);
+                    setDragIndex(null);
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  className={`flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2.5 ${dragIndex === index ? "opacity-60" : ""}`}
+                >
+                  <span className="cursor-grab text-xs text-slate-500">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-white">{track.title}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{track.artistName ?? "Unknown artist"}</p>
+                  </div>
+                  {controller.removeQueueItem ? (
+                    <button
+                      className="btn-secondary px-2 py-1 text-xs"
+                      disabled={locked}
+                      onClick={() => removeQueueItem(index)}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
                 </div>
               ))
             ) : (

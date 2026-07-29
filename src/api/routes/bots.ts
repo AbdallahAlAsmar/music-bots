@@ -317,6 +317,64 @@ export function createBotRoutes(deps: BotRouteDeps): Hono<{ Variables: AuthVaria
     }
   });
 
+  app.patch("/:id/player/seek", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ position_ms?: number }>();
+    if (!Number.isFinite(body.position_ms)) {
+      return c.json({ error: "position_ms is required" }, 400);
+    }
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "seek", {
+        positionMs: body.position_ms,
+        actorTag: user.username
+      });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/queue/remove", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ index?: number }>();
+    if (!Number.isFinite(body.index)) {
+      return c.json({ error: "index is required" }, 400);
+    }
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "remove", {
+        index: body.index,
+        actorTag: user.username
+      });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
+  app.post("/:id/player/queue/reorder", async (c) => {
+    const user = c.get("user");
+    const botId = c.req.param("id");
+    const body = await c.req.json<{ from_index?: number; to_index?: number }>();
+    if (!Number.isFinite(body.from_index) || !Number.isFinite(body.to_index)) {
+      return c.json({ error: "from_index and to_index are required" }, 400);
+    }
+    try {
+      const state = await manager.controlMusicForUser(user.id, botId, "reorder", {
+        fromIndex: body.from_index,
+        toIndex: body.to_index,
+        actorTag: user.username
+      });
+      return c.json({ player: toPlayerStateDto(state) });
+    } catch (error) {
+      const mapped = mapError(error);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+  });
+
   app.get("/:id/room-link", async (c) => {
     const user = c.get("user");
     const botId = c.req.param("id");

@@ -258,6 +258,27 @@ export async function playerClear(id: string): Promise<{ player: PlayerStateDto 
   return apiFetch(`/api/bots/${id}/player/clear`, { method: "POST" });
 }
 
+export async function playerSeek(id: string, positionMs: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/bots/${id}/player/seek`, {
+    method: "PATCH",
+    body: JSON.stringify({ position_ms: positionMs })
+  });
+}
+
+export async function playerRemoveQueueItem(id: string, index: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/bots/${id}/player/queue/remove`, {
+    method: "POST",
+    body: JSON.stringify({ index })
+  });
+}
+
+export async function playerReorderQueue(id: string, fromIndex: number, toIndex: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/bots/${id}/player/queue/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ from_index: fromIndex, to_index: toIndex })
+  });
+}
+
 export async function fetchRoomLink(id: string): Promise<RoomLinkDto> {
   return apiFetch(`/api/bots/${id}/room-link`);
 }
@@ -313,6 +334,27 @@ export async function roomPlayerSetVolume(token: string, percent: number): Promi
   return apiFetch(`/api/room/${encodeURIComponent(token)}/player/volume`, {
     method: "PATCH",
     body: JSON.stringify({ percent })
+  });
+}
+
+export async function roomPlayerSeek(token: string, positionMs: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/seek`, {
+    method: "PATCH",
+    body: JSON.stringify({ position_ms: positionMs })
+  });
+}
+
+export async function roomPlayerRemoveQueueItem(token: string, index: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/queue/remove`, {
+    method: "POST",
+    body: JSON.stringify({ index })
+  });
+}
+
+export async function roomPlayerReorderQueue(token: string, fromIndex: number, toIndex: number): Promise<{ player: PlayerStateDto }> {
+  return apiFetch(`/api/room/${encodeURIComponent(token)}/player/queue/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ from_index: fromIndex, to_index: toIndex })
   });
 }
 

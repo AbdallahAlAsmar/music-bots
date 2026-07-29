@@ -684,8 +684,8 @@ export class BotManager {
   async controlMusicForUser(
     requesterId: string,
     botId: string,
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
-    payload?: { query?: string; volume?: number; actorTag?: string }
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear" | "seek" | "remove" | "reorder",
+    payload?: { query?: string; volume?: number; actorTag?: string; positionMs?: number; index?: number; fromIndex?: number; toIndex?: number }
   ): Promise<MusicStateSnapshot> {
     await this.permissionService.assertRole(botId, requesterId, "admin");
     const runtime = this.runtimes.get(botId);
@@ -813,8 +813,8 @@ export class BotManager {
     token: string,
     requesterId: string,
     actorTag: string,
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
-    payload?: { query?: string; volume?: number }
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear" | "seek" | "remove" | "reorder",
+    payload?: { query?: string; volume?: number; positionMs?: number; index?: number; fromIndex?: number; toIndex?: number }
   ): Promise<MusicStateSnapshot> {
     const { bot } = await this.resolveRoomByToken(token);
     const runtime = this.runtimes.get(bot.id);
@@ -860,6 +860,32 @@ export class BotManager {
         action: input.action,
         error: (error as Error).message
       });
+    }
+  }
+
+  async invalidateVoiceAssignment(botId: string, reason: string): Promise<void> {
+    const bot = await this.botRepo.findById(botId);
+    if (!bot?.voice_channel_id) {
+      return;
+    }
+
+    await this.botRepo.update(botId, { voice_channel_id: null });
+    await this.updateBotHealth(botId, {
+      runtime_state: "degraded",
+      last_error: reason,
+      health_updated_at: new Date().toISOString()
+    });
+
+    const runtime = this.runtimes.get(botId);
+    if (runtime) {
+      const latest = await this.botRepo.findById(botId);
+      if (latest) {
+        await runtime.refresh(latest);
+      }
+    }
+
+    if (bot.owner_id) {
+      void this.notifications?.notifyRuntimeError(bot.owner_id, botId, reason);
     }
   }
 
@@ -968,7 +994,8 @@ export class BotManager {
             const link = await this.roomLinkRepo.findActiveByBotId(id);
             return link ? this.roomUrlForToken(link.token) : null;
           },
-          recordRoomAction: (input) => this.recordRoomAction(input)
+          recordRoomAction: (input) => this.recordRoomAction(input),
+          invalidateVoiceAssignment: (id, reason) => this.invalidateVoiceAssignment(id, reason)
         },
         async (id, reason) => {
           logger.warn("Runtime fault detected", { botId: id, reason });

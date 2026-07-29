@@ -7,7 +7,10 @@ import {
   roomPlayerClear,
   roomPlayerPause,
   roomPlayerPlay,
+  roomPlayerRemoveQueueItem,
+  roomPlayerReorderQueue,
   roomPlayerResume,
+  roomPlayerSeek,
   roomPlayerSetVolume,
   roomPlayerSkip,
   roomPlayerStop
@@ -53,7 +56,10 @@ export default function RoomPage() {
       skip: () => roomPlayerSkip(token),
       stop: () => roomPlayerStop(token),
       clear: () => roomPlayerClear(token),
-      setVolume: (percent) => roomPlayerSetVolume(token, percent)
+      setVolume: (percent) => roomPlayerSetVolume(token, percent),
+      seek: (positionMs) => roomPlayerSeek(token, positionMs),
+      removeQueueItem: (index) => roomPlayerRemoveQueueItem(token, index),
+      reorderQueue: (fromIndex, toIndex) => roomPlayerReorderQueue(token, fromIndex, toIndex)
     }),
     [token]
   );

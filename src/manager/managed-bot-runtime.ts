@@ -16,6 +16,7 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Message,
+  type MessageActionRowComponentBuilder,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
   type VoiceBasedChannel
@@ -117,6 +118,7 @@ interface ManagedRuntimeActions {
     details?: Record<string, unknown> | null;
     source: "discord" | "dashboard" | "room";
   }): Promise<void>;
+  invalidateVoiceAssignment(botId: string, reason: string): Promise<void>;
 }
 
 type MentionCommand = "setup" | "come" | "leave" | "manage";
@@ -127,6 +129,19 @@ function isUnknownInteractionError(error: unknown): boolean {
 
 function isUnknownGuildError(error: unknown): boolean {
   return error instanceof DiscordAPIError && error.code === 10004;
+}
+
+function isUnknownChannelError(error: unknown): boolean {
+  if (error instanceof DiscordAPIError && error.code === 10003) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("unknown channel");
+}
+
+function isMissingVoiceChannelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("assigned channel is missing") || message.includes("not voice-based");
 }
 
 function toActivityType(kind: BotEntity["status_type"]): ActivityType {
@@ -159,6 +174,9 @@ export class ManagedBotRuntime {
   private voiceKeepAliveInterval: NodeJS.Timeout | null = null;
   private voiceKeepAliveDisabledReason: string | null = null;
   private musicAnnouncementChannelId: string | null = null;
+  private stickyControlMessageId: string | null = null;
+  private stickyControlChannelId: string | null = null;
+  private stickyRefreshInFlight: Promise<void> | null = null;
   private lyricsUpdateTimer: NodeJS.Timeout | null = null;
   private lyricsPlaybackState: LyricsPlaybackState | null = null;
   private lyricsPlaybackSessionId = 0;
@@ -267,32 +285,37 @@ export class ManagedBotRuntime {
   }
 
   async controlMusic(
-    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear",
-    payload?: { query?: string; volume?: number; requesterId?: string }
+    action: "pause" | "resume" | "skip" | "stop" | "play" | "volume" | "clear" | "seek" | "remove" | "reorder",
+    payload?: { query?: string; volume?: number; requesterId?: string; positionMs?: number; index?: number; fromIndex?: number; toIndex?: number }
   ): Promise<void> {
     const player = this.player;
     if (action === "pause") {
       if (!player.pause()) {
         throw new Error("Nothing is playing");
       }
+      void this.upsertStickyControlMessage();
       return;
     }
     if (action === "resume") {
       if (!player.resume()) {
         throw new Error("Nothing is paused");
       }
+      void this.upsertStickyControlMessage();
       return;
     }
     if (action === "skip") {
       player.skip();
+      void this.upsertStickyControlMessage(true);
       return;
     }
     if (action === "stop") {
       player.stop();
+      void this.upsertStickyControlMessage(true);
       return;
     }
     if (action === "clear") {
       player.clear();
+      void this.upsertStickyControlMessage();
       return;
     }
     if (action === "volume") {
@@ -301,6 +324,40 @@ export class ManagedBotRuntime {
         throw new Error("volume is required");
       }
       player.setVolume(Number(volume));
+      void this.upsertStickyControlMessage();
+      return;
+    }
+    if (action === "seek") {
+      const positionMs = payload?.positionMs;
+      if (!Number.isFinite(positionMs)) {
+        throw new Error("positionMs is required");
+      }
+      await player.seek(Number(positionMs));
+      void this.upsertStickyControlMessage();
+      return;
+    }
+    if (action === "remove") {
+      const index = payload?.index;
+      if (!Number.isFinite(index)) {
+        throw new Error("index is required");
+      }
+      const removed = player.remove(Number(index));
+      if (!removed) {
+        throw new Error("Invalid queue index");
+      }
+      void this.upsertStickyControlMessage();
+      return;
+    }
+    if (action === "reorder") {
+      const fromIndex = payload?.fromIndex;
+      const toIndex = payload?.toIndex;
+      if (!Number.isFinite(fromIndex) || !Number.isFinite(toIndex)) {
+        throw new Error("fromIndex and toIndex are required");
+      }
+      if (!player.moveQueueItem(Number(fromIndex), Number(toIndex))) {
+        throw new Error("Invalid queue reorder request");
+      }
+      void this.upsertStickyControlMessage();
       return;
     }
     if (action === "play") {
@@ -313,6 +370,7 @@ export class ManagedBotRuntime {
       }
       await this.joinAssignedVoice();
       await player.add(query, payload?.requesterId ? `web:${payload.requesterId}` : "web");
+      void this.upsertStickyControlMessage(true);
     }
   }
 
@@ -345,10 +403,10 @@ export class ManagedBotRuntime {
       try {
         await this.syncManagedCommands();
       } catch (error) {
-        logger.error("Managed bot command registration failed", { botId: this.botData.id, error: (error as Error).message });
-        if (isUnknownGuildError(error)) {
-          await this.disableVoiceKeepAlive("Configured guild is unavailable to this bot");
+        if (await this.handlePermanentVoiceAssignmentError(error)) {
+          return;
         }
+        logger.error("Managed bot command registration failed", { botId: this.botData.id, error: (error as Error).message });
         await this.updateHealth({
           runtime_state: "degraded",
           last_error: (error as Error).message,
@@ -371,8 +429,8 @@ export class ManagedBotRuntime {
           await this.wait(this.initialVoiceJoinJitterMs());
           await this.joinAssignedVoice();
         } catch (error) {
-          if (isUnknownGuildError(error)) {
-            await this.disableVoiceKeepAlive("Configured guild is unavailable to this bot");
+          if (await this.handlePermanentVoiceAssignmentError(error)) {
+            return;
           }
           logger.warn("Managed bot initial auto-join failed", {
             botId: this.botData.id,
@@ -480,6 +538,9 @@ export class ManagedBotRuntime {
       try {
         await this.joinAssignedVoice();
       } catch (error) {
+        if (await this.handlePermanentVoiceAssignmentError(error)) {
+          return;
+        }
         logger.warn("Auto-rejoin failed", { botId: this.botData.id, error: (error as Error).message });
         await this.updateHealth({
           runtime_state: "degraded",
@@ -654,7 +715,7 @@ export class ManagedBotRuntime {
       this.musicAnnouncementChannelId = interaction.channelId;
       await this.logMusicAction(interaction.user.id, interaction.user.tag, "play", { query, title: result.nowPlaying.title });
       const roomUrl = await this.runtimeActions.getRoomLinkUrl(this.botData.id);
-      const components = [this.controlMenuRow()];
+      const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [this.controlMenuRow()];
       if (roomUrl) {
         components.push(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -3093,29 +3154,155 @@ export class ManagedBotRuntime {
     }
   }
 
-  private async announceTrackStart(track: Track): Promise<void> {
-    if (!this.musicAnnouncementChannelId) {
+  private async handlePermanentVoiceAssignmentError(error: unknown): Promise<boolean> {
+    if (!isUnknownGuildError(error) && !isUnknownChannelError(error) && !isMissingVoiceChannelError(error)) {
+      return false;
+    }
+
+    const reason = isUnknownGuildError(error)
+      ? "Configured guild is unavailable to this bot"
+      : isUnknownChannelError(error)
+        ? "Assigned voice channel no longer exists"
+        : "Assigned voice channel is missing or invalid";
+
+    await this.disableVoiceKeepAlive(reason);
+    await this.runtimeActions.invalidateVoiceAssignment(this.botData.id, reason);
+    return true;
+  }
+
+  private async resolveControlTextChannelId(): Promise<string | null> {
+    if (this.musicAnnouncementChannelId) {
+      return this.musicAnnouncementChannelId;
+    }
+    if (this.botData.log_channel_id) {
+      return this.botData.log_channel_id;
+    }
+
+    const assigned = this.botData.voice_channel_id;
+    if (!assigned) {
+      return null;
+    }
+
+    const guild =
+      this.client.guilds.cache.get(this.botData.guild_id) ??
+      (await this.client.guilds.fetch(this.botData.guild_id).catch(() => null));
+    if (!guild) {
+      return null;
+    }
+
+    const voiceChannel = guild.channels.cache.get(assigned) ?? (await guild.channels.fetch(assigned).catch(() => null));
+    if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+      return null;
+    }
+
+    const parentId = voiceChannel.parentId;
+    const textChannel = guild.channels.cache
+      .filter((channel) => channel.isTextBased() && !channel.isThread() && channel.id !== assigned && (!parentId || channel.parentId === parentId))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .first();
+
+    if (textChannel) {
+      return textChannel.id;
+    }
+
+    return guild.systemChannelId ?? null;
+  }
+
+  private async buildStickyControlComponents(): Promise<ActionRowBuilder<MessageActionRowComponentBuilder>[]> {
+    const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [this.controlMenuRow()];
+    const roomUrl = await this.runtimeActions.getRoomLinkUrl(this.botData.id);
+    if (roomUrl) {
+      components.push(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setLabel(this.t("Open web controls", "افتح التحكم من الويب"))
+            .setStyle(ButtonStyle.Link)
+            .setURL(roomUrl)
+        )
+      );
+    }
+    return components;
+  }
+
+  private async upsertStickyControlMessage(forceBump = false): Promise<void> {
+    if (this.stickyRefreshInFlight) {
+      await this.stickyRefreshInFlight.catch(() => undefined);
+      if (!forceBump) {
+        return;
+      }
+    }
+
+    this.stickyRefreshInFlight = this.upsertStickyControlMessageInternal(forceBump);
+    try {
+      await this.stickyRefreshInFlight;
+    } finally {
+      this.stickyRefreshInFlight = null;
+    }
+  }
+
+  private async upsertStickyControlMessageInternal(forceBump: boolean): Promise<void> {
+    const channelId = await this.resolveControlTextChannelId();
+    if (!channelId) {
       return;
     }
 
-    try {
-      const channel = await this.client.channels.fetch(this.musicAnnouncementChannelId);
-      if (!channel || !channel.isTextBased() || !("send" in channel) || typeof channel.send !== "function") {
-        return;
-      }
+    this.musicAnnouncementChannelId = channelId;
 
-      const announcement = await channel.send({
-        embeds: [this.trackEmbed(this.t("🎵 Now Playing", "🎵 يتم التشغيل الآن"), track)],
-        components: [this.controlMenuRow()]
-      });
-      void this.startLyricsUpdates(track, announcement);
-    } catch (error) {
-      logger.warn("Managed bot now-playing announce failed", {
-        botId: this.botData.id,
-        channelId: this.musicAnnouncementChannelId,
-        error: (error as Error).message
-      });
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.isTextBased() || !("send" in channel) || typeof channel.send !== "function") {
+      return;
     }
+
+    const now = this.player.getNowPlaying();
+    const embed = now
+      ? this.trackEmbed(this.t("🎵 Now Playing", "🎵 يتم التشغيل الآن"), now)
+      : new EmbedBuilder()
+          .setTitle(this.t("🎧 Music Controls", "🎧 تحكم الموسيقى"))
+          .setDescription(
+            this.t(
+              "Bot is connected to the assigned voice channel. Use /play, the menu below, or the web room to queue music.",
+              "البوت متصل بالروم الصوتي المعيّن. استخدم /play أو القائمة بالأسفل أو روم الويب لإضافة الموسيقى."
+            )
+          )
+          .setColor(0x10b981);
+    const components = await this.buildStickyControlComponents();
+    const payload = { embeds: [embed], components };
+
+    if (forceBump && this.stickyControlMessageId && this.stickyControlChannelId === channelId) {
+      const oldMessage = await channel.messages.fetch(this.stickyControlMessageId).catch(() => null);
+      if (oldMessage) {
+        await oldMessage.delete().catch(() => undefined);
+      }
+      this.stickyControlMessageId = null;
+    }
+
+    if (!forceBump && this.stickyControlMessageId && this.stickyControlChannelId === channelId) {
+      try {
+        const message = await channel.messages.fetch(this.stickyControlMessageId);
+        await message.edit(payload);
+        if (now) {
+          void this.startLyricsUpdates(now, message);
+        } else {
+          this.stopLyricsUpdates();
+        }
+        return;
+      } catch {
+        this.stickyControlMessageId = null;
+      }
+    }
+
+    const message = await channel.send(payload);
+    this.stickyControlMessageId = message.id;
+    this.stickyControlChannelId = channelId;
+    if (now) {
+      void this.startLyricsUpdates(now, message);
+    } else {
+      this.stopLyricsUpdates();
+    }
+  }
+
+  private async announceTrackStart(_track: Track): Promise<void> {
+    await this.upsertStickyControlMessage(true);
   }
 
   private startVoiceKeepAlive(): void {
@@ -3138,8 +3325,7 @@ export class ManagedBotRuntime {
       try {
         await this.joinAssignedVoice();
       } catch (error) {
-        if (isUnknownGuildError(error)) {
-          await this.disableVoiceKeepAlive("Configured guild is unavailable to this bot");
+        if (await this.handlePermanentVoiceAssignmentError(error)) {
           return;
         }
         logger.warn("Managed bot keep-alive reconnect failed", {
@@ -3205,14 +3391,25 @@ export class ManagedBotRuntime {
       return;
     }
     logger.debug("Managed bot auto-join attempt starting");
-    const guild = await this.client.guilds.fetch(this.botData.guild_id);
+    const guild = await this.client.guilds.fetch(this.botData.guild_id).catch(async (error) => {
+      await this.handlePermanentVoiceAssignmentError(error);
+      return null;
+    });
+    if (!guild) {
+      throw new Error("Configured guild is unavailable to this bot");
+    }
     const me = await guild.members.fetchMe().catch(() => null);
     if (me?.voice.channelId === this.botData.voice_channel_id && this.player.hasActiveVoiceSession()) {
       return;
     }
-    const channel = await guild.channels.fetch(this.botData.voice_channel_id);
+    const channel = await guild.channels.fetch(this.botData.voice_channel_id).catch((error) => {
+      void this.handlePermanentVoiceAssignmentError(error);
+      return null;
+    });
     if (!channel || !channel.isVoiceBased()) {
-      throw new Error("Assigned channel is missing or not voice-based");
+      const missingError = new Error("Assigned channel is missing or not voice-based");
+      await this.handlePermanentVoiceAssignmentError(missingError);
+      throw missingError;
     }
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 1; attempt++) {
@@ -3226,6 +3423,7 @@ export class ManagedBotRuntime {
           last_error: null,
           health_updated_at: new Date().toISOString()
         });
+        void this.upsertStickyControlMessage(true);
         return;
       } catch (error) {
         lastError = error as Error;
@@ -3236,6 +3434,9 @@ export class ManagedBotRuntime {
           error: lastError.message
         });
       }
+    }
+    if (lastError) {
+      await this.handlePermanentVoiceAssignmentError(lastError);
     }
     await this.updateHealth({
       ...(lastError && isTransientNetworkError(lastError) ? {} : { runtime_state: "degraded" }),

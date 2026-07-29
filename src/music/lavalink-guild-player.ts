@@ -266,6 +266,27 @@ export class LavalinkGuildPlayer {
     return removed ?? null;
   }
 
+  moveQueueItem(fromIndex: number, toIndex: number): boolean {
+    if (fromIndex < 0 || fromIndex >= this.queue.length || toIndex < 0 || toIndex >= this.queue.length || fromIndex === toIndex) {
+      return false;
+    }
+    const [item] = this.queue.splice(fromIndex, 1);
+    if (!item) {
+      return false;
+    }
+    this.queue.splice(toIndex, 0, item);
+    return true;
+  }
+
+  async seek(positionMs: number): Promise<void> {
+    if (!this.lavalinkPlayer || !this.nowPlaying) {
+      throw new Error("Nothing is playing");
+    }
+    const maxMs = this.nowPlaying.lengthMs;
+    const target = maxMs > 0 ? Math.max(0, Math.min(positionMs, maxMs)) : Math.max(0, positionMs);
+    await this.lavalinkPlayer.seekTo(target);
+  }
+
   setLoop(mode: LoopMode): void {
     this.loopMode = mode;
   }
